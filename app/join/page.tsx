@@ -99,7 +99,10 @@ const [playStyle, setPlayStyle] = useState<"enjoy" | "serious">("enjoy");
   <div style={{ display: "flex", gap: 10 }}>
   <button
     type="button"
-    onClick={() => setExperience("none")}
+    onClick={() => {
+      setExperience("none");
+      setRank("モンスターボール級");
+    }}
     style={{
       padding: "10px 14px",
       borderRadius: 8,
@@ -113,7 +116,10 @@ const [playStyle, setPlayStyle] = useState<"enjoy" | "serious">("enjoy");
 
   <button
     type="button"
-    onClick={() => setExperience("participated")}
+    onClick={() => {
+      setExperience("participated");
+      setRank("スーパーボール級");
+    }}
     style={{
       padding: "10px 14px",
       borderRadius: 8,
@@ -127,7 +133,10 @@ const [playStyle, setPlayStyle] = useState<"enjoy" | "serious">("enjoy");
 
   <button
     type="button"
-    onClick={() => setExperience("winner")}
+    onClick={() => {
+      setExperience("winner");
+      setRank("ハイパーボール級");
+    }}
     style={{
       padding: "10px 14px",
       borderRadius: 8,
