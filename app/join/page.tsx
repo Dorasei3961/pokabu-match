@@ -96,32 +96,50 @@ const [playStyle, setPlayStyle] = useState<"enjoy" | "serious">("enjoy");
         <div style={{ marginTop: 20 }}>
   <h3>公式大会</h3>
 
-  <label>
-    <input
-      type="radio"
-      checked={experience === "none"}
-      onChange={() => setExperience("none")}
-    />
+  <div style={{ display: "flex", gap: 10 }}>
+  <button
+    type="button"
+    onClick={() => setExperience("none")}
+    style={{
+      padding: "10px 14px",
+      borderRadius: 8,
+      border: "1px solid #ccc",
+      background: experience === "none" ? "#333" : "#fff",
+      color: experience === "none" ? "#fff" : "#000",
+    }}
+  >
     出場なし
-  </label>
+  </button>
 
-  <label>
-    <input
-      type="radio"
-      checked={experience === "participated"}
-      onChange={() => setExperience("participated")}
-    />
+  <button
+    type="button"
+    onClick={() => setExperience("participated")}
+    style={{
+      padding: "10px 14px",
+      borderRadius: 8,
+      border: "1px solid #ccc",
+      background: experience === "participated" ? "#333" : "#fff",
+      color: experience === "participated" ? "#fff" : "#000",
+    }}
+  >
     出場あり
-  </label>
+  </button>
 
-  <label>
-    <input
-      type="radio"
-      checked={experience === "winner"}
-      onChange={() => setExperience("winner")}
-    />
+  <button
+    type="button"
+    onClick={() => setExperience("winner")}
+    style={{
+      padding: "10px 14px",
+      borderRadius: 8,
+      border: "1px solid #ccc",
+      background: experience === "winner" ? "#333" : "#fff",
+      color: experience === "winner" ? "#fff" : "#000",
+    }}
+  >
     入賞・優勝あり
-  </label>
+  </button>
+</div>
+ 
 </div>
 
 <div style={{ marginTop: 20 }}>
