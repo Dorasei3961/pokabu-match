@@ -173,9 +173,7 @@ const [playStyle, setPlayStyle] = useState<"enjoy" | "serious">("enjoy");
   </label>
 </div>
 
-<div style={{ marginTop: 16, fontWeight: 700 }}>
-  階級：{rank}
-</div>
+
 
         <button
           onClick={handleSubmit}

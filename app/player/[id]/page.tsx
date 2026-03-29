@@ -259,7 +259,16 @@ export default function PlayerPage() {
 
       <p>名前：{player.name}</p>
       <p>プレイ歴：{player.history}</p>
-      <p>階級：{player.rank}</p>
+      <div style={{
+  fontWeight: 700,
+  fontSize: 18,
+  color:
+    player.rank === "モンスターボール級" ? "#ef4444" :
+    player.rank === "スーパーボール級" ? "#3b82f6" :
+    "#facc15"
+}}>
+  階級：{player.rank}
+</div>
       <p>使用デッキ：{player.deck || "未設定"}</p>
 
       <hr style={{ margin: "20px 0" }} />
@@ -275,6 +284,18 @@ export default function PlayerPage() {
               {opponent ? opponent.name : "不在"}
             </span>
           </p>
+          <p>
+  階級：
+  <span style={{
+    fontWeight: 700,
+    color:
+      opponent?.rank === "モンスターボール級" ? "#ef4444" :
+      opponent?.rank === "スーパーボール級" ? "#3b82f6" :
+      "#facc15"
+  }}>
+    {opponent ? opponent.rank : "-"}
+  </span>
+</p>
           <p>
             対戦種別：
             {tableInfo.type === "same-rank"
