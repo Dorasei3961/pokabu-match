@@ -9,7 +9,6 @@ export default function JoinPage() {
   const router = useRouter();
 
   const [name, setName] = useState("");
-  const [history, setHistory] = useState("");
   const [deck, setDeck] = useState("");
   const [rank, setRank] = useState("モンスターボール級");
   const [loading, setLoading] = useState(false);
@@ -27,7 +26,6 @@ const [playStyle, setPlayStyle] = useState<"enjoy" | "serious">("enjoy");
     try {
       const docRef = await addDoc(collection(db, "players"), {
         name: name.trim(),
-        history: history.trim(),
         deck: deck.trim(),
         rank,
         wins: 0,
@@ -68,18 +66,7 @@ const [playStyle, setPlayStyle] = useState<"enjoy" | "serious">("enjoy");
           }}
         />
 
-        <input
-          type="text"
-          placeholder="プレイ歴（例：1年未満 / 1年以上2年未満 / 2年以上）"
-          value={history}
-          onChange={(e) => setHistory(e.target.value)}
-          style={{
-            padding: 12,
-            fontSize: 16,
-            border: "1px solid #ccc",
-            borderRadius: 8,
-          }}
-        />
+        
 
         <input
           type="text"
@@ -154,23 +141,34 @@ const [playStyle, setPlayStyle] = useState<"enjoy" | "serious">("enjoy");
 <div style={{ marginTop: 20 }}>
   <h3>プレイスタイル</h3>
 
-  <label>
-    <input
-      type="radio"
-      checked={playStyle === "enjoy"}
-      onChange={() => setPlayStyle("enjoy")}
-    />
+  <div style={{ display: "flex", gap: 10 }}>
+  <button
+    type="button"
+    onClick={() => setPlayStyle("enjoy")}
+    style={{
+      padding: "10px 14px",
+      borderRadius: 8,
+      border: "1px solid #ccc",
+      background: playStyle === "enjoy" ? "#333" : "#fff",
+      color: playStyle === "enjoy" ? "#fff" : "#000",
+    }}
+  >
     エンジョイ
-  </label>
+  </button>
 
-  <label>
-    <input
-      type="radio"
-      checked={playStyle === "serious"}
-      onChange={() => setPlayStyle("serious")}
-    />
-    ガチ
-  </label>
+  <button
+    type="button"
+    onClick={() => setPlayStyle("serious")}
+    style={{
+      padding: "10px 14px",
+      borderRadius: 8,
+      border: "1px solid #ccc",
+      background: playStyle === "serious" ? "#333" : "#fff",
+      color: playStyle === "serious" ? "#fff" : "#000",
+    }}
+  >
+    真剣勝負
+  </button>
 </div>
 
 
@@ -191,6 +189,7 @@ const [playStyle, setPlayStyle] = useState<"enjoy" | "serious">("enjoy");
           {loading ? "登録中..." : "参加する"}
         </button>
       </div>
+    </div>
     </div>
   );
 }

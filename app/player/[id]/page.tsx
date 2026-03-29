@@ -258,7 +258,6 @@ export default function PlayerPage() {
       <h1>参加者情報</h1>
 
       <p>名前：{player.name}</p>
-      <p>プレイ歴：{player.history}</p>
       <div style={{
   fontWeight: 700,
   fontSize: 18,

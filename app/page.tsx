@@ -948,15 +948,7 @@ const handleFullRandomMatch = async () => {
       fontSize: 18,
     }}
   >
-    <div
-      style={{
-        padding: "10px 16px",
-        borderRadius: 10,
-        backgroundColor: "#dbeafe",
-      }}
-    >
-      チームA：{teamWinCounts.A}勝
-    </div>
+    
 
   <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
   
