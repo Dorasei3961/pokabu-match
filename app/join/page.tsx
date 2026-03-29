@@ -173,20 +173,9 @@ const [playStyle, setPlayStyle] = useState<"enjoy" | "serious">("enjoy");
   </label>
 </div>
 
-        <select
-          value={rank}
-          onChange={(e) => setRank(e.target.value)}
-          style={{
-            padding: 12,
-            fontSize: 16,
-            border: "1px solid #ccc",
-            borderRadius: 8,
-          }}
-        >
-          <option value="モンスターボール級">モンスターボール級</option>
-          <option value="スーパーボール級">スーパーボール級</option>
-          <option value="ハイパーボール級">ハイパーボール級</option>
-        </select>
+<div style={{ marginTop: 16, fontWeight: 700 }}>
+  階級：{rank}
+</div>
 
         <button
           onClick={handleSubmit}
