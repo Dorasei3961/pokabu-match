@@ -101,7 +101,218 @@ type SavedMatch = {
   roundEndAt?: number | null;
   tables: SavedMatchTable[];
 };
+const pageWrapStyle: React.CSSProperties = {
+  minHeight: "100vh",
+  background: "#f5f5f7",
+  padding: "16px 12px 40px",
+};
 
+const pageInnerStyle: React.CSSProperties = {
+  maxWidth: 520,
+  margin: "0 auto",
+  display: "grid",
+  gap: 16,
+};
+
+const cardStyle: React.CSSProperties = {
+  background: "#fff",
+  borderRadius: 20,
+  padding: 16,
+  boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+  border: "1px solid #ececec",
+};
+
+const sectionTitleStyle: React.CSSProperties = {
+  fontSize: 16,
+  fontWeight: 800,
+  marginBottom: 12,
+  color: "#111827",
+};
+
+const bigTimerWrapStyle: React.CSSProperties = {
+  ...cardStyle,
+  textAlign: "center",
+};
+
+const teamScoreRowStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr auto",
+  gap: 12,
+  alignItems: "stretch",
+};
+
+const teamAStyle: React.CSSProperties = {
+  background: "#dbeafe",
+  borderRadius: 16,
+  padding: 16,
+  fontSize: 18,
+  fontWeight: 800,
+  textAlign: "center",
+};
+
+const teamBStyle: React.CSSProperties = {
+  background: "#fee2e2",
+  borderRadius: 16,
+  padding: 16,
+  fontSize: 18,
+  fontWeight: 800,
+  textAlign: "center",
+};
+
+const resetBtnStyle: React.CSSProperties = {
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  borderRadius: 16,
+  padding: "0 16px",
+  fontSize: 18,
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const modeGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 12,
+  marginTop: 12,
+};
+
+const timerAdjustRowStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "72px 1fr 72px",
+  gap: 12,
+  alignItems: "center",
+  marginTop: 16,
+};
+
+const timerAdjustBtnStyle: React.CSSProperties = {
+  height: 60,
+  borderRadius: 16,
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  fontSize: 32,
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const timerCenterStyle: React.CSSProperties = {
+  height: 60,
+  borderRadius: 16,
+  border: "1px solid #e5e7eb",
+  background: "#fff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 24,
+  fontWeight: 800,
+};
+
+const primaryBtnStyle: React.CSSProperties = {
+  border: "none",
+  borderRadius: 16,
+  padding: "16px 14px",
+  color: "#fff",
+  fontSize: 18,
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const secondaryBtnStyle: React.CSSProperties = {
+  border: "1px solid #d1d5db",
+  borderRadius: 16,
+  padding: "16px 14px",
+  background: "#fff",
+  color: "#111827",
+  fontSize: 18,
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const playerScrollStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 12,
+  overflowX: "auto",
+  paddingBottom: 4,
+};
+
+const playerMiniCardStyle: React.CSSProperties = {
+  minWidth: 150,
+  background: "#fff",
+  borderRadius: 16,
+  border: "1px solid #e5e7eb",
+  padding: 14,
+  boxShadow: "0 3px 10px rgba(0,0,0,0.04)",
+  flexShrink: 0,
+};
+const matchListStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 14,
+};
+
+const matchCardStyle: React.CSSProperties = {
+  background: "#fff",
+  borderRadius: 18,
+  border: "1px solid #e5e7eb",
+  padding: 16,
+  boxShadow: "0 6px 18px rgba(0,0,0,0.05)",
+};
+
+const matchHeaderRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  marginBottom: 12,
+};
+
+const statusBadgeStyle = (isPlaying: boolean): React.CSSProperties => ({
+  fontSize: 14,
+  fontWeight: 800,
+  color: isPlaying ? "#2563eb" : "#6b7280",
+});
+
+const versusGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr",
+  gap: 10,
+  marginTop: 12,
+};
+
+const sideCardStyle: React.CSSProperties = {
+  border: "1px solid #e5e7eb",
+  borderRadius: 14,
+  padding: 14,
+  background: "#fafafa",
+};
+
+const winnerBtnStyle = (active: boolean): React.CSSProperties => ({
+  width: "100%",
+  border: "none",
+  borderRadius: 14,
+  padding: "14px 12px",
+  fontSize: 16,
+  fontWeight: 800,
+  color: "#fff",
+  background: active ? "#f59e0b" : "#737373",
+  cursor: "pointer",
+  marginTop: 12,
+});
+
+const dividerStyle: React.CSSProperties = {
+  height: 1,
+  background: "#ececec",
+  margin: "14px 0",
+};
+
+const smallMutedStyle: React.CSSProperties = {
+  fontSize: 14,
+  color: "#6b7280",
+};
+
+const nameStrongStyle: React.CSSProperties = {
+  fontSize: 20,
+  fontWeight: 800,
+  color: "#111827",
+};
 export default function Home() {
   const router = useRouter();
 
@@ -116,6 +327,7 @@ export default function Home() {
   const [notifiedMarks, setNotifiedMarks] = useState<string[]>([]);
   const [experience, setExperience] = useState<"none" | "participated" | "winner">("none");
 const [playStyle, setPlayStyle] = useState<"enjoy" | "serious">("enjoy");
+const [openPlayerId, setOpenPlayerId] = useState<string | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, "players"), orderBy("createdAt", "desc"));
@@ -704,46 +916,58 @@ const handleFullRandomMatch = async () => {
     hyper: players.filter((player) => player.rank === "ハイパーボール級"),
   };
 
-  const renderPlayers = (list: Player[]) => {
-    if (list.length === 0) {
-      return <p>まだ参加者はいません</p>;
-    }
 
-    return (
-      <div style={{ display: "grid", gap: 12 }}>
-        {list.map((player) => (
+const renderPlayers = (list: Player[]) => {
+  if (list.length === 0) {
+    return <p>まだ参加者はいません</p>;
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      {list.map((player) => {
+        const isOpen = openPlayerId === player.id;
+
+        return (
           <div
             key={player.id}
-            onClick={() => router.push(`/player/${player.id}`)}
             style={{
               border: "1px solid #ccc",
-              borderRadius: 10,
-              padding: 16,
-              backgroundColor: "#fff",
-              cursor: "pointer",
+              borderRadius: 12,
+              background: "#fff",
             }}
           >
-            <div style={{ fontSize: 18, fontWeight: "bold", marginBottom: 6 }}>
-              {player.name}
-            </div>
-            <div style={{ marginTop: 8, fontSize: 12 }}>
-  {player.tags.experience === "none" && "大会未出場"}
-  {player.tags.experience === "participated" && "大会出場あり"}
-  {player.tags.experience === "winner" && "入賞・優勝経験あり"}
-</div>
+            <div
+  onClick={() => setOpenPlayerId(isOpen ? null : player.id)}
+  style={{
+    padding: 12,
+    fontSize: 16,
+    fontWeight: "bold",
+    cursor: "pointer",
+    height: 56,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center"
+  }}
 
-<div style={{ fontSize: 12 }}>
-  {player.tags.playStyle === "enjoy" ? "エンジョイ勢" : "ガチ勢"}
-</div>
-            <div style={{ marginBottom: 4 }}>プレイ歴：{player.history}</div>
-            <div style={{ marginBottom: 4 }}>階級：{player.rank}</div>
-            <div style={{ marginBottom: 4 }}>使用デッキ：{player.deck || "未設定"}</div>
-            <div>勝数：{player.wins || 0}</div>
+            >
+              {player.name} 
+            </div>
+
+            {isOpen && (
+              <div style={{ padding: "0 16px 16px", fontSize: 14 }}>
+                <div>階級：{player.rank}</div>
+                <div>プレイ歴：{player.history}</div>
+                <div>使用デッキ：{player.deck || "未設定"}</div>
+                <div>勝数：{player.wins ?? 0}</div>
+              </div>
+            )}
           </div>
-        ))}
-      </div>
-    );
-  };
+        );
+      })}
+    </div>
+  );
+};
 
   const renderTypeLabel = (
     type: "same-rank" | "cross-rank" | "random" | "team-random"
@@ -817,7 +1041,7 @@ const handleFullRandomMatch = async () => {
     const notify = (key: string, title: string, body: string) => {
       if (notifiedMarks.includes(key)) return;
 
-      new Notification(title, { body });
+     // new Notification(title, { body });
       setNotifiedMarks((prev) => [...prev, key]);
     };
 
@@ -879,11 +1103,13 @@ const handleFullRandomMatch = async () => {
   };
 
   return (
+    
     <div
+  
       style={{
         padding: 20,
         fontFamily: "sans-serif",
-        maxWidth: 1100,
+        maxWidth: 420,
         margin: "0 auto",
       }}
     >
@@ -1144,7 +1370,7 @@ const handleFullRandomMatch = async () => {
             style={{
               border: "1px solid #ccc",
               borderRadius: 12,
-              padding: 20,
+              padding: 14,
               backgroundColor: "#fff",
             }}
           >
@@ -1160,7 +1386,7 @@ const handleFullRandomMatch = async () => {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(2, 1fr)",
+                gridTemplateColumns: "1fr",
                 gap: 16,
               }}
             >
