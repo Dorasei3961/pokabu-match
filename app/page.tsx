@@ -1176,36 +1176,53 @@ const renderPlayers = (list: Player[]) => {
   >
     
 
-  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+    <div style={{
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr auto",
+  gap: 12,
+  alignItems: "stretch"
+}}>
   
   <div style={{
-    background: "#dbeafe",
-    padding: "8px 16px",
-    borderRadius: 8
-  }}>
-    チームA：{teamWinCounts.A}勝
-  </div>
+  background: "#dbeafe",
+  padding: "12px 16px",
+  borderRadius: 12,
+  fontSize: 16,
+  fontWeight: "bold",
+  whiteSpace: "nowrap",
+  textAlign: "center"
+}}>
+  チームA：{teamWinCounts.A}勝
+</div>
 
-  <div style={{
-    background: "#fee2e2",
-    padding: "8px 16px",
-    borderRadius: 8
-  }}>
-    チームB：{teamWinCounts.B}勝
-  </div>
+<div style={{
+  background: "#fee2e2",
+  padding: "12px 16px",
+  borderRadius: 12,
+  fontSize: 16,
+  fontWeight: "bold",
+  whiteSpace: "nowrap",
+  textAlign: "center"
+}}>
+  チームB：{teamWinCounts.B}勝
+</div>
 
-  <button
-    onClick={handleResetTeamCounts}
-    style={{
-      padding: "6px 12px",
-      borderRadius: 6,
-      border: "1px solid #ccc",
-      background: "#fff",
-      cursor: "pointer"
-    }}
-  >
-    リセット
-  </button>
+<button
+  onClick={handleResetTeamCounts}
+  style={{
+    padding: "12px 16px",
+    borderRadius: 12,
+    border: "1px solid #ccc",
+    background: "#fff",
+    cursor: "pointer",
+    fontSize: 16,
+    fontWeight: "bold",
+    whiteSpace: "nowrap",
+    minWidth: 96
+  }}
+>
+  リセット
+</button>
 
 </div>
   </div>
