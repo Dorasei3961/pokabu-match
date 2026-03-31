@@ -1106,12 +1106,13 @@ const renderPlayers = (list: Player[]) => {
     
     <div
   
-      style={{
-        padding: 20,
-        fontFamily: "sans-serif",
-        maxWidth: 420,
-        margin: "0 auto",
-      }}
+    style={{
+      padding: 20,
+      fontFamily: "sans-serif",
+      maxWidth: 420,
+      width: "100%",
+      margin: "0 auto",
+    }}
     >
       <h1 style={{ marginBottom: 20, textAlign: "center" }}>ぽか部運営画面</h1>
 
