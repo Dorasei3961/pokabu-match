@@ -1281,19 +1281,19 @@ const renderPlayers = (list: Player[]) => {
       </div>
 
       <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          gap: 12,
-          marginBottom: 30,
-          flexWrap: "wrap",
-        }}
+  style={{
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 12,
+    marginBottom: 30,
+  }}
       >
         <button
           onClick={handleRankPriorityMatch}
           disabled={saving}
           style={{
-            padding: "12px 24px",
+            height: 56,
+            width: "100%",
             fontSize: 16,
             border: "none",
             borderRadius: 10,
@@ -1308,11 +1308,12 @@ const renderPlayers = (list: Player[]) => {
   onClick={handleTeamRandomMatch}
   disabled={saving}
   style={{
-    padding: "12px 24px",
+    height: 56,
+    width: "100%",
     fontSize: 16,
     border: "none",
     borderRadius: 10,
-    backgroundColor: "purple",
+    backgroundColor: "#16a34a",
     color: "white",
     cursor: "pointer",
   }}
@@ -1323,11 +1324,13 @@ const renderPlayers = (list: Player[]) => {
           onClick={handleFullRandomMatch}
           disabled={saving}
           style={{
-            padding: "12px 24px",
+            height: 56,
+            width: "100%",
             fontSize: 16,
-            border: "1px solid #ccc",
+            border: "none",
             borderRadius: 10,
-            backgroundColor: "#fff",
+            backgroundColor: "#ef4444",
+            color: "white",
             cursor: "pointer",
           }}
         >
@@ -1339,7 +1342,8 @@ const renderPlayers = (list: Player[]) => {
             onClick={handleStartRound}
             disabled={startingRound}
             style={{
-              padding: "12px 24px",
+              height: 56,
+              width: "100%",
               fontSize: 16,
               border: "none",
               borderRadius: 10,
