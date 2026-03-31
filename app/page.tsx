@@ -1360,24 +1360,24 @@ const renderPlayers = (list: Player[]) => {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
+          gridTemplateColumns: "1.15fr 1fr 1fr",
           gap: 20,
           alignItems: "start",
           marginBottom: 40,
         }}
       >
         <div>
-          <h2 style={{ marginBottom: 16 }}>モンスターボール級</h2>
+          <h2 style={{ marginBottom: 16, whiteSpace: "nowrap" }}>モンスターボール級</h2>
           {renderPlayers(grouped.monster)}
         </div>
 
         <div>
-          <h2 style={{ marginBottom: 16 }}>スーパーボール級</h2>
+          <h2 style={{ marginBottom: 16, whiteSpace: "nowrap" }}>スーパーボール級</h2>
           {renderPlayers(grouped.super)}
         </div>
 
         <div>
-          <h2 style={{ marginBottom: 16 }}>ハイパーボール級</h2>
+          <h2 style={{ marginBottom: 16, whiteSpace: "nowrap" }}>ハイパーボール級</h2>
           {renderPlayers(grouped.hyper)}
         </div>
       </div>
