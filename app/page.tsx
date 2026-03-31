@@ -1367,17 +1367,17 @@ const renderPlayers = (list: Player[]) => {
         }}
       >
         <div>
-          <h2 style={{ marginBottom: 16, whiteSpace: "nowrap" }}>モンスターボール級</h2>
+          <h2 style={{ marginBottom: 16,}}>🔴 モンボ級</h2>
           {renderPlayers(grouped.monster)}
         </div>
 
         <div>
-          <h2 style={{ marginBottom: 16, whiteSpace: "nowrap" }}>スーパーボール級</h2>
+          <h2 style={{ marginBottom: 16,}}>🔵 スパボ級</h2>
           {renderPlayers(grouped.super)}
         </div>
 
         <div>
-          <h2 style={{ marginBottom: 16, whiteSpace: "nowrap" }}>ハイパーボール級</h2>
+          <h2 style={{ marginBottom: 16,}}>🟡 ハイボ級</h2>
           {renderPlayers(grouped.hyper)}
         </div>
       </div>
