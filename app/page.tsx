@@ -25,6 +25,7 @@ type Player = {
   name: string;
   history: string;
   rank: string;
+  team?: "A" | "B"
   deck?: string;
   wins?: number;
   tags: {
@@ -328,6 +329,30 @@ export default function Home() {
   const [experience, setExperience] = useState<"none" | "participated" | "winner">("none");
 const [playStyle, setPlayStyle] = useState<"enjoy" | "serious">("enjoy");
 const [openPlayerId, setOpenPlayerId] = useState<string | null>(null);
+const [selectedTeam, setSelectedTeam] = useState<"A" | "B" | null>(null)
+
+const teamMembers = useMemo(() => {
+  if (!latestMatch || latestMatch.matchType !== "team-random") {
+    return { A: [], B: [] }
+  }
+
+  const aMap = new Map<string, string>()
+  const bMap = new Map<string, string>()
+
+  latestMatch.tables.forEach((table) => {
+    if (table.player1?.id && table.player1?.name) {
+      aMap.set(table.player1.id, table.player1.name)
+    }
+    if (table.player2?.id && table.player2?.name) {
+      bMap.set(table.player2.id, table.player2.name)
+    }
+  })
+
+  return {
+    A: Array.from(aMap.values()),
+    B: Array.from(bMap.values()),
+  }
+}, [latestMatch])
 
   useEffect(() => {
     const q = query(collection(db, "players"), orderBy("createdAt", "desc"));
@@ -1184,27 +1209,34 @@ const renderPlayers = (list: Player[]) => {
   alignItems: "stretch"
 }}>
   
-  <div style={{
-  background: "#dbeafe",
-  padding: "12px 16px",
-  borderRadius: 12,
-  fontSize: 16,
-  fontWeight: "bold",
-  whiteSpace: "nowrap",
-  textAlign: "center"
-}}>
+  <div
+  onClick={() => setSelectedTeam(selectedTeam === "A" ? null : "A")}
+  style={{
+    background: "#dbeafe",
+    padding: "12px 16px",
+    borderRadius: 12,
+    fontSize: 16,
+    fontWeight: "bold",
+    whiteSpace: "nowrap",
+    textAlign: "center",
+    cursor: "pointer",
+  }}
+>
   チームA：{teamWinCounts.A}勝
 </div>
-
-<div style={{
-  background: "#fee2e2",
-  padding: "12px 16px",
-  borderRadius: 12,
-  fontSize: 16,
-  fontWeight: "bold",
-  whiteSpace: "nowrap",
-  textAlign: "center"
-}}>
+<div
+  onClick={() => setSelectedTeam(selectedTeam === "B" ? null : "B")}
+  style={{
+    background: "#fee2e2",
+    padding: "12px 16px",
+    borderRadius: 12,
+    fontSize: 16,
+    fontWeight: "bold",
+    whiteSpace: "nowrap",
+    textAlign: "center",
+    cursor: "pointer",
+  }}
+>
   チームB：{teamWinCounts.B}勝
 </div>
 
@@ -1225,6 +1257,42 @@ const renderPlayers = (list: Player[]) => {
   リセット
 </button>
 
+{selectedTeam && (
+  <div
+    style={{
+      marginTop: 16,
+      marginBottom: 20,
+      padding: 16,
+      border: "1px solid #ddd",
+      borderRadius: 12,
+      background: "#fff",
+    }}
+  >
+    <div style={{ fontWeight: "bold", marginBottom: 10 }}>
+      {selectedTeam === "A" ? "チームAメンバー" : "チームBメンバー"}
+    </div>
+
+    {teamMembers[selectedTeam].length === 0 ? (
+      <div>まだチーム戦の卓振りがありません</div>
+    ) : (
+      <div style={{ display: "grid", gap: 8 }}>
+        {teamMembers[selectedTeam].map((name) => (
+          <div
+            key={name}
+            style={{
+              padding: "10px 12px",
+              border: "1px solid #eee",
+              borderRadius: 10,
+              background: "#fafafa",
+            }}
+          >
+            {name}
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+)}
 </div>
   </div>
 )}
