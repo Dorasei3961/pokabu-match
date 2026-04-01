@@ -56,6 +56,17 @@ export default function PlayerPage() {
   const [opponentDeckInput, setOpponentDeckInput] = useState("");
   const [mySide, setMySide] = useState("6");
   const [opponentSide, setOpponentSide] = useState("0");
+  const handleFinishMatch = async () => {
+
+    if (!player) return;
+  
+    await updateDoc(doc(db, "players", playerId), {
+      status: "waiting"
+    });
+  
+    alert("対戦終了しました");
+  
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -394,7 +405,24 @@ export default function PlayerPage() {
                 borderRadius: 10,
                 padding: 16,
               }}
+            ><div style={{ marginTop: 16, marginBottom: 16 }}>
+            <button
+              onClick={handleFinishMatch}
+              style={{
+                width: "100%",
+                padding: "14px",
+                borderRadius: 10,
+                border: "none",
+                background: "#2563eb",
+                color: "white",
+                fontSize: 18,
+                fontWeight: "bold",
+                cursor: "pointer",
+              }}
             >
+              対戦終了
+            </button>
+          </div>
               <div style={{ marginBottom: 12, fontWeight: "bold" }}>
                 勝ち申請入力
               </div>

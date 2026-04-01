@@ -28,6 +28,7 @@ type Player = {
   team?: "A" | "B"
   deck?: string;
   wins?: number;
+  status?: "waiting" | "playing";
   tags: {
     experience: "none" | "participated" | "winner";
     playStyle: "enjoy" | "serious";
@@ -316,6 +317,83 @@ const nameStrongStyle: React.CSSProperties = {
 };
 export default function Home() {
   const router = useRouter();
+  const handleCasualMatch = async () => {
+
+    if (!players || players.length < 2) {
+      alert("参加者が足りません");
+      return;
+    }
+  
+    const snapshot = await getDocs(collection(db, "matchResults"));
+  
+    const playedMap = new Map();
+  
+    snapshot.docs.forEach((doc) => {
+  
+      const data = doc.data();
+      const tables = data.tables || [];
+  
+      tables.forEach((table: any) => {
+  
+        const p1 = table.player1;
+        const p2 = table.player2;
+  
+        if (!p1 || !p2) return;
+  
+        if (!playedMap.has(p1.id)) playedMap.set(p1.id, new Set());
+        if (!playedMap.has(p2.id)) playedMap.set(p2.id, new Set());
+  
+        playedMap.get(p1.id).add(p2.id);
+        playedMap.get(p2.id).add(p1.id);
+  
+      });
+  
+    });
+  
+    const shuffled = [...players].sort(() => Math.random() - 0.5);
+  
+    const remaining = [...shuffled];
+    const tables = [];
+  
+    let tableNumber = 1;
+  
+    while (remaining.length >= 2) {
+  
+      const player1 = remaining.shift()!;
+  
+      const playedSet = playedMap.get(player1.id) || new Set();
+  
+      let opponentIndex = remaining.findIndex(
+        (p) => !playedSet.has(p.id)
+      );
+  
+      if (opponentIndex === -1) {
+        opponentIndex = 0;
+      }
+  
+      const player2 = remaining.splice(opponentIndex, 1)[0];
+  
+      tables.push({
+        tableNumber,
+        player1,
+        player2,
+        type: "casual",
+        started: false
+      });
+  
+      tableNumber++;
+  
+    }
+  
+    const newMatch = {
+      matchType: "casual",
+      createdAt: Date.now(),
+      tables
+    };
+  
+    await addDoc(collection(db, "matchResults"), newMatch);
+  
+  };
 
   const [players, setPlayers] = useState<Player[]>([]);
   const [latestMatch, setLatestMatch] = useState<SavedMatch | null>(null);
@@ -585,7 +663,52 @@ const teamMembers = useMemo(() => {
       monsterResult.leftover = undefined;
       superResult.leftover = undefined;
     }
-
+    const handleCasualMatch = async () => {
+      if (!players || players.length < 2) {
+        alert("参加者が足りません");
+        return;
+      }
+    
+      // waiting プレイヤーだけ取得
+      const waitingPlayers = players.filter(
+        (p) => (p.status ?? "waiting") === "waiting"
+      );
+    
+      if (waitingPlayers.length < 2) {
+        alert("待機プレイヤーが足りません");
+        return;
+      }
+    
+      // シャッフル
+      const shuffled = [...waitingPlayers].sort(() => Math.random() - 0.5);
+    
+      const tables = [];
+    
+      let tableNumber = 1;
+    
+      for (let i = 0; i < shuffled.length - 1; i += 2) {
+        const player1 = shuffled[i];
+        const player2 = shuffled[i + 1];
+    
+        tables.push({
+          tableNumber,
+          player1,
+          player2,
+          started: false,
+          matchType: "casual",
+        });
+    
+        tableNumber++;
+      }
+    
+      const newMatch = {
+        matchType: "casual",
+        createdAt: Date.now(),
+        tables,
+      };
+    
+      await addDoc(collection(db, "matchResults"), newMatch);
+    };
     if (superResult.leftover && hyperResult.leftover) {
       finalTables.push({
         tableNumber,
@@ -1172,6 +1295,7 @@ const renderPlayers = (list: Player[]) => {
           🏆 ランキングを見る
         </button>
       </div>
+      
 
       <div
         style={{
@@ -1404,7 +1528,21 @@ const renderPlayers = (list: Player[]) => {
         >
           ランダム戦
         </button>
-
+        <button
+  onClick={handleCasualMatch}
+  style={{
+    height: 56,
+    width: "100%",
+    fontSize: 16,
+    border: "none",
+    borderRadius: 10,
+    backgroundColor: "#8b5cf6",
+    color: "white",
+    cursor: "pointer",
+  }}
+>
+  交流会マッチ
+</button>
         {latestMatch && (
           <button
             onClick={handleStartRound}
