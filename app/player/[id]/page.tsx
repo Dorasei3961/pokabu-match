@@ -57,15 +57,32 @@ export default function PlayerPage() {
   const [mySide, setMySide] = useState("6");
   const [opponentSide, setOpponentSide] = useState("0");
   const handleFinishMatch = async () => {
-
-    if (!player) return;
+    if (!player || !tableInfo) return;
   
-    await updateDoc(doc(db, "players", playerId), {
-      status: "waiting"
-    });
+    try {
+      const myId = playerId;
   
-    alert("対戦終了しました");
+      const opponentId =
+        tableInfo.player1?.id === myId
+          ? tableInfo.player2?.id
+          : tableInfo.player1?.id;
   
+      await updateDoc(doc(db, "players", myId), {
+        status: "waiting",
+      });
+  
+      if (opponentId) {
+        await updateDoc(doc(db, "players", opponentId), {
+          status: "waiting",
+        });
+      }
+  
+      alert("対戦終了しました");
+      window.location.reload();
+    } catch (error) {
+      console.error(error);
+      alert("対戦終了に失敗しました");
+    }
   };
 
   useEffect(() => {

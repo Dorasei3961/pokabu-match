@@ -390,7 +390,18 @@ export default function Home() {
       createdAt: Date.now(),
       tables
     };
-  
+    const matchedPlayerIds = tables.flatMap((table) => [
+      table.player1.id,
+      table.player2.id,
+    ]);
+    
+    await Promise.all(
+      matchedPlayerIds.map((id) =>
+        updateDoc(doc(db, "players", id), {
+          status: "playing",
+        })
+      )
+    );
     await addDoc(collection(db, "matchResults"), newMatch);
   
   };
@@ -408,6 +419,13 @@ export default function Home() {
 const [playStyle, setPlayStyle] = useState<"enjoy" | "serious">("enjoy");
 const [openPlayerId, setOpenPlayerId] = useState<string | null>(null);
 const [selectedTeam, setSelectedTeam] = useState<"A" | "B" | null>(null)
+const waitingCount = players.filter(
+  (p) => (p.status ?? "waiting") === "waiting"
+).length;
+
+const playingCount = players.filter(
+  (p) => p.status === "playing"
+).length;
 
 const teamMembers = useMemo(() => {
   if (!latestMatch || latestMatch.matchType !== "team-random") {
@@ -1313,6 +1331,41 @@ const renderPlayers = (list: Player[]) => {
       >
         ラウンドタイマー：{timerText}
       </div>
+      <div
+  style={{
+    display: "flex",
+    justifyContent: "center",
+    gap: 12,
+    marginBottom: 20,
+    flexWrap: "wrap",
+  }}
+>
+  <div
+    style={{
+      padding: "10px 16px",
+      borderRadius: 12,
+      background: "#ecfdf5",
+      fontWeight: "bold",
+      fontSize: 16,
+      border: "1px solid #bbf7d0",
+    }}
+  >
+    待機中：{waitingCount}人
+  </div>
+
+  <div
+    style={{
+      padding: "10px 16px",
+      borderRadius: 12,
+      background: "#eff6ff",
+      fontWeight: "bold",
+      fontSize: 16,
+      border: "1px solid #bfdbfe",
+    }}
+  >
+    対戦中：{playingCount}人
+  </div>
+</div>
       {latestMatch?.matchType === "team-random" && (
   <div
     style={{
