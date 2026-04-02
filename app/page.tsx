@@ -316,6 +316,17 @@ const nameStrongStyle: React.CSSProperties = {
   color: "#111827",
 };
 export default function Home() {
+  const getTableStatusLabel = (table: any) => {
+    if (table.finished) return "終了";
+    if (table.started) return "対戦中";
+    return "未開始";
+  };
+  
+  const getTableStatusColor = (table: any) => {
+    if (table.finished) return "#16a34a";
+    if (table.started) return "#2563eb";
+    return "#999999";
+  };
   const router = useRouter();
   const handleCasualMatch = async () => {
 
@@ -384,16 +395,18 @@ export default function Home() {
       tableNumber++;
   
     }
-  
     const newMatch = {
       matchType: "casual",
       createdAt: Date.now(),
-      tables
+      tables,
     };
+    
+    await addDoc(collection(db, "matchResults"), newMatch);
+    
     const matchedPlayerIds = tables.flatMap((table) => [
-      table.player1.id,
-      table.player2.id,
-    ]);
+      table.player1?.id,
+      table.player2?.id,
+    ]).filter(Boolean) as string[];
     
     await Promise.all(
       matchedPlayerIds.map((id) =>
@@ -1145,6 +1158,9 @@ const renderPlayers = (list: Player[]) => {
   };
 
   const getStatusLabel = (table: SavedMatchTable) => {
+    if ((table as any).finished) {
+      return { text: "終了", color: "#16a34a" };
+    }
     if (table.winnerId) {
       return { text: "承認済み", color: "#16a34a" };
     }

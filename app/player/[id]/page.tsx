@@ -6,6 +6,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   limit,
   onSnapshot,
   orderBy,
@@ -18,6 +19,7 @@ type PlayerData = {
   history: string;
   rank: string;
   deck: string;
+  tags?: any;
 };
 
 type MatchPlayer = {
@@ -57,33 +59,112 @@ export default function PlayerPage() {
   const [mySide, setMySide] = useState("6");
   const [opponentSide, setOpponentSide] = useState("0");
   const handleFinishMatch = async () => {
-    if (!player || !tableInfo) return;
+    // ここに対戦終了の処理
+  };
+
+  
+  const handleNextMatch = async () => {
+  
+    if (!playerId || !player) return;
   
     try {
-      const myId = playerId;
   
-      const opponentId =
-        tableInfo.player1?.id === myId
-          ? tableInfo.player2?.id
-          : tableInfo.player1?.id;
+      const playersSnap = await getDocs(collection(db, "players"));
+      const matchSnap = await getDocs(collection(db, "matchResults"));
   
-      await updateDoc(doc(db, "players", myId), {
-        status: "waiting",
-      });
+      const waitingPlayers = playersSnap.docs
+        .map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
+        .filter(
+          (p: any) =>
+            p.id !== playerId &&
+            (p.status ?? "waiting") === "waiting"
+        );
   
-      if (opponentId) {
-        await updateDoc(doc(db, "players", opponentId), {
-          status: "waiting",
-        });
+      if (waitingPlayers.length === 0) {
+        alert("現在マッチできる待機相手がいません");
+        return;
       }
   
-      alert("対戦終了しました");
-      window.location.reload();
-    } catch (error) {
-      console.error(error);
-      alert("対戦終了に失敗しました");
+      const opponent = waitingPlayers[0];
+  
+      const allMatches = matchSnap.docs.map((doc: any) => ({
+        id: doc.id,
+        ...(doc.data() as any),
+      }));
+  
+      const finishedTables = allMatches
+        .flatMap((match: any) => match.tables ?? [])
+        .filter((table: any) => table.finished === true)
+        .sort((a: any, b: any) => a.tableNumber - b.tableNumber);
+  
+      if (finishedTables.length === 0) {
+        alert("空いている卓がありません");
+        return;
+      }
+  
+      const reusableTable = finishedTables[0];
+
+    const targetMatch = allMatches.find((match: any) =>
+      (match.tables ?? []).some(
+        (table: any) => table.tableNumber === reusableTable.tableNumber
+      )
+    );
+
+    if (!targetMatch) {
+      alert("再利用する卓が見つかりません");
+      return;
     }
-  };
+
+    const updatedTables = (targetMatch.tables ?? []).map((table: any) =>
+      table.tableNumber === reusableTable.tableNumber
+        ? {
+            ...table,
+            player1: {
+              id: playerId,
+              name: player.name,
+              rank: player.rank,
+              deck: player.deck ?? "",
+            },
+            player2: {
+              id: opponent.id,
+              name: opponent.name,
+              rank: opponent.rank,
+              deck: opponent.deck ?? "",
+            },
+            started: true,
+            finished: false,
+            pendingWinnerId: null,
+            winnerId: null,
+            reportedById: null,
+            reportedOpponentDeck: null,
+            reportedWinnerSide: null,
+            reportedLoserSide: null,
+            reportedWinnerDeck: null,
+          }
+        : table
+    );
+
+    await updateDoc(doc(db, "matchResults", targetMatch.id), {
+      tables: updatedTables,
+    });
+
+    await Promise.all([
+      updateDoc(doc(db, "players", playerId), {
+        status: "playing",
+      }),
+      updateDoc(doc(db, "players", opponent.id), {
+        status: "playing",
+      }),
+    ]);
+
+    alert(`卓${reusableTable.tableNumber}で ${opponent.name} さんと対戦です`);
+    window.location.reload();
+  } catch (error) {
+    console.error(error);
+    alert("次の対戦の作成に失敗しました");
+  }
+};
+
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -440,6 +521,24 @@ export default function PlayerPage() {
               対戦終了
             </button>
           </div>
+          <div style={{ marginTop: 16, marginBottom: 16 }}>
+  <button
+    onClick={handleNextMatch}
+    style={{
+      width: "100%",
+      padding: "14px",
+      borderRadius: 10,
+      border: "none",
+      background: "#16a34a",
+      color: "white",
+      fontSize: 18,
+      fontWeight: "bold",
+      cursor: "pointer",
+    }}
+  >
+    次の対戦
+  </button>
+</div>
               <div style={{ marginBottom: 12, fontWeight: "bold" }}>
                 勝ち申請入力
               </div>
