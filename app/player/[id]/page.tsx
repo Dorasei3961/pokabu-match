@@ -620,7 +620,23 @@ export default function PlayerPage() {
                   color: "white",
                   cursor: savingRequest ? "default" : "pointer",
                 }}
+              ><div style={{ marginTop: 12 }}>
+              <button
+                onClick={handleNextMatch}
+                style={{
+                  width: "100%",
+                  padding: "12px 24px",
+                  fontSize: 18,
+                  border: "none",
+                  borderRadius: 10,
+                  backgroundColor: "#16a34a",
+                  color: "white",
+                  cursor: "pointer"
+                }}
               >
+                次の対戦
+              </button>
+            </div>
                 {savingRequest ? "申請中..." : "勝ち申請"}
               </button>
             </div>
