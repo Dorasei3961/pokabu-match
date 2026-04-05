@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { db } from "../lib/firebase";
+import { startCasualMatches } from "@/lib/matches";
 import {
   addDoc,
   collection,
@@ -329,95 +330,22 @@ export default function Home() {
   };
   const router = useRouter();
   const handleCasualMatch = async () => {
-
-    if (!players || players.length < 2) {
-      alert("参加者が足りません");
-      return;
-    }
+    try {
+      setLatestMatch(null);
   
-    const snapshot = await getDocs(collection(db, "matchResults"));
+      const created = await startCasualMatches("default");
   
-    const playedMap = new Map();
-  
-    snapshot.docs.forEach((doc) => {
-  
-      const data = doc.data();
-      const tables = data.tables || [];
-  
-      tables.forEach((table: any) => {
-  
-        const p1 = table.player1;
-        const p2 = table.player2;
-  
-        if (!p1 || !p2) return;
-  
-        if (!playedMap.has(p1.id)) playedMap.set(p1.id, new Set());
-        if (!playedMap.has(p2.id)) playedMap.set(p2.id, new Set());
-  
-        playedMap.get(p1.id).add(p2.id);
-        playedMap.get(p2.id).add(p1.id);
-  
-      });
-  
-    });
-  
-    const shuffled = [...players].sort(() => Math.random() - 0.5);
-  
-    const remaining = [...shuffled];
-    const tables = [];
-  
-    let tableNumber = 1;
-  
-    while (remaining.length >= 2) {
-  
-      const player1 = remaining.shift()!;
-  
-      const playedSet = playedMap.get(player1.id) || new Set();
-  
-      let opponentIndex = remaining.findIndex(
-        (p) => !playedSet.has(p.id)
+      alert(`交流会マッチを開始しました（${created.length}試合作成）`);
+    } catch (error) {
+      console.error(error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "交流会マッチの開始に失敗しました"
       );
-  
-      if (opponentIndex === -1) {
-        opponentIndex = 0;
-      }
-  
-      const player2 = remaining.splice(opponentIndex, 1)[0];
-  
-      tables.push({
-        tableNumber,
-        player1,
-        player2,
-        type: "casual",
-        started: false
-      });
-  
-      tableNumber++;
-  
     }
-    const newMatch = {
-      matchType: "casual",
-      createdAt: Date.now(),
-      tables,
-    };
-    
-    await addDoc(collection(db, "matchResults"), newMatch);
-    
-    const matchedPlayerIds = tables.flatMap((table) => [
-      table.player1?.id,
-      table.player2?.id,
-    ]).filter(Boolean) as string[];
-    
-    await Promise.all(
-      matchedPlayerIds.map((id) =>
-        updateDoc(doc(db, "players", id), {
-          status: "playing",
-        })
-      )
-    );
-    await addDoc(collection(db, "matchResults"), newMatch);
-  
   };
+
 
   const [players, setPlayers] = useState<Player[]>([]);
   const [latestMatch, setLatestMatch] = useState<SavedMatch | null>(null);
@@ -464,7 +392,7 @@ const teamMembers = useMemo(() => {
 }, [latestMatch])
 
   useEffect(() => {
-    const q = query(collection(db, "players"), orderBy("createdAt", "desc"));
+    const q = collection(db, "players");
   
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list: Player[] = snapshot.docs.map((docSnap) => {
@@ -477,6 +405,8 @@ const teamMembers = useMemo(() => {
           rank: data.rank || "",
           deck: data.deck || "",
           wins: data.wins || 0,
+          status: data.status || "waiting",
+          currentMatchId: data.currentMatchId || null,
           tags: {
             experience: data.tags?.experience || "none",
             playStyle: data.tags?.playStyle || "enjoy",

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { startCasualMatches } from "@/lib/matches";
 
 type SavedMatchTablePlayer = {
   id: string;
@@ -108,6 +109,17 @@ function getMatchTypeLabel(matchType?: SavedMatch["matchType"]) {
 
 export default function BoardPage() {
   const [latestMatch, setLatestMatch] = useState<SavedMatch | null>(null);
+  const eventId = "default";
+
+const handleCasualMatchStart = async () => {
+  try {
+    const created = await startCasualMatches(eventId);
+    alert(`交流会マッチを開始しました（${created.length}試合作成）`);
+  } catch (error) {
+    console.error(error);
+    alert("交流会マッチの開始に失敗しました");
+  }
+};
 
   useEffect(() => {
     const q = query(
@@ -140,7 +152,9 @@ export default function BoardPage() {
   return (
     <div style={pageStyle}>
       <h1 style={titleStyle}>対戦表</h1>
-
+      <button onClick={handleCasualMatchStart}>
+  交流会マッチ開始
+</button>
       <div style={subStyle}>
         {latestMatch ? getMatchTypeLabel(latestMatch.matchType) : "交流会モード"}
       </div>
