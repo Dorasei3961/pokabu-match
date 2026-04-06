@@ -55,10 +55,27 @@ export default function PlayerPage() {
   const [loading, setLoading] = useState(true);
   const [savingRequest, setSavingRequest] = useState(false);
   const [now, setNow] = useState(Date.now());
-
+  
+  
   const [opponentDeckInput, setOpponentDeckInput] = useState("");
   const [mySide, setMySide] = useState("6");
   const [opponentSide, setOpponentSide] = useState("0");
+  const [waitingCount, setWaitingCount] = useState(0);
+  useEffect(() => {
+    const q = query(collection(db, "players"));
+  
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const count = snapshot.docs.filter((docSnap) => {
+        const data = docSnap.data();
+        return (data.status ?? "waiting") === "waiting";
+      }).length;
+  
+      setWaitingCount(count);
+    });
+  
+    return () => unsubscribe();
+  }, []);
+  const canNextMatch = waitingCount >= 2;
   const handleFinishMatch = async () => {
     if (!playerId || !player || !tableInfo) return;
   
