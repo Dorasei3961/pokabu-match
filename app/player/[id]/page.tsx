@@ -112,20 +112,45 @@ export default function PlayerPage() {
     try {
   
       const playersSnap = await getDocs(collection(db, "players"));
-      const matchSnap = await getDocs(collection(db, "matchResults"));
-  
-      const waitingPlayers = playersSnap.docs
-        .map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
-        .filter(
-          (p: any) =>
-            p.id !== playerId &&
-            (p.status ?? "waiting") === "waiting"
-        );
-  
-      if (waitingPlayers.length === 0) {
-        alert("現在マッチできる待機相手がいません");
-        return;
-      }
+const matchSnap = await getDocs(
+  collection(db, "events", "default", "matches")
+);
+
+const pastOpponentIds = new Set<string>();
+
+matchSnap.docs.forEach((doc) => {
+  const data = doc.data();
+
+  if (data.player1Id === playerId && data.player2Id) {
+    pastOpponentIds.add(data.player2Id);
+  }
+
+  if (data.player2Id === playerId && data.player1Id) {
+    pastOpponentIds.add(data.player1Id);
+  }
+});
+
+const allWaitingPlayers = playersSnap.docs
+  .map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
+  .filter(
+    (p: any) =>
+      p.id !== playerId &&
+      (p.status ?? "waiting") === "waiting"
+  );
+
+let waitingPlayers = allWaitingPlayers.filter(
+  (p: any) => !pastOpponentIds.has(p.id)
+);
+
+// 全員と対戦済みなら再戦OK
+if (waitingPlayers.length === 0) {
+  waitingPlayers = allWaitingPlayers;
+}
+
+if (waitingPlayers.length === 0) {
+  alert("現在マッチできる待機相手がいません");
+  return;
+}
   
       const opponent = waitingPlayers[0];
   
