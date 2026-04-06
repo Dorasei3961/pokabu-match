@@ -134,7 +134,6 @@ const allWaitingPlayers = playersSnap.docs
   .map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
   .filter(
     (p: any) =>
-      p.id !== playerId &&
       (p.status ?? "waiting") === "waiting"
   );
 
@@ -161,7 +160,7 @@ if (waitingPlayers.length === 0) {
   
       const finishedTables = allMatches
         .flatMap((match: any) => match.tables ?? [])
-        .filter((table: any) => table.finished === true)
+        .filter((table: any) => !table.started || table.finished === true)
         .sort((a: any, b: any) => a.tableNumber - b.tableNumber);
   
       if (finishedTables.length === 0) {
@@ -589,22 +588,24 @@ if (waitingPlayers.length === 0) {
             </button>
           </div>
           <div style={{ marginTop: 16, marginBottom: 16 }}>
-  <button
-    onClick={handleNextMatch}
-    style={{
-      width: "100%",
-      padding: "14px",
-      borderRadius: 10,
-      border: "none",
-      background: "#16a34a",
-      color: "white",
-      fontSize: 18,
-      fontWeight: "bold",
-      cursor: "pointer",
-    }}
-  >
-    次の対戦
-  </button>
+          <button
+  onClick={handleNextMatch}
+  disabled={!canNextMatch}
+  style={{
+    width: "100%",
+    padding: "14px",
+    borderRadius: 10,
+    border: "none",
+    background: canNextMatch ? "#16a34a" : "#9ca3af",
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+    cursor: canNextMatch ? "pointer" : "not-allowed",
+    opacity: canNextMatch ? 1 : 0.7,
+  }}
+>
+  {canNextMatch ? "次の対戦" : "待機中2人以上で対戦可能"}
+</button>
 </div>
               <div style={{ marginBottom: 12, fontWeight: "bold" }}>
                 勝ち申請入力
