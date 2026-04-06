@@ -32,6 +32,7 @@ type MatchPlayer = {
 type SavedMatchTable = {
   tableNumber: number;
   type: "same-rank" | "cross-rank" | "random";
+  opponentId?: string;
   started?: boolean;
   pendingWinnerId?: string | null;
   winnerId?: string | null;
@@ -59,18 +60,21 @@ export default function PlayerPage() {
   const [mySide, setMySide] = useState("6");
   const [opponentSide, setOpponentSide] = useState("0");
   const handleFinishMatch = async () => {
-    if (!playerId || !player) return;
+    if (!playerId || !player || !tableInfo) return;
   
     try {
-      // 自分をwaitingに戻す
+      const opponentId =
+        tableInfo.player1?.id === playerId
+          ? tableInfo.player2?.id ?? null
+          : tableInfo.player1?.id ?? null;
+  
       await updateDoc(doc(db, "players", playerId), {
         status: "waiting",
         currentMatchId: null,
       });
   
-      // 相手もwaitingに戻す
-      if (tableInfo?.opponentId) {
-        await updateDoc(doc(db, "players", tableInfo.opponentId), {
+      if (opponentId) {
+        await updateDoc(doc(db, "players", opponentId), {
           status: "waiting",
           currentMatchId: null,
         });
