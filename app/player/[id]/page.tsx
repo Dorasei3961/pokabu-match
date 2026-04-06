@@ -59,7 +59,28 @@ export default function PlayerPage() {
   const [mySide, setMySide] = useState("6");
   const [opponentSide, setOpponentSide] = useState("0");
   const handleFinishMatch = async () => {
-    // ここに対戦終了の処理
+    if (!playerId || !player) return;
+  
+    try {
+      // 自分をwaitingに戻す
+      await updateDoc(doc(db, "players", playerId), {
+        status: "waiting",
+        currentMatchId: null,
+      });
+  
+      // 相手もwaitingに戻す
+      if (tableInfo?.opponentId) {
+        await updateDoc(doc(db, "players", tableInfo.opponentId), {
+          status: "waiting",
+          currentMatchId: null,
+        });
+      }
+  
+      alert("対戦を終了しました");
+    } catch (error) {
+      console.error(error);
+      alert("対戦終了処理に失敗しました");
+    }
   };
 
   
@@ -620,23 +641,7 @@ export default function PlayerPage() {
                   color: "white",
                   cursor: savingRequest ? "default" : "pointer",
                 }}
-              ><div style={{ marginTop: 12 }}>
-              <button
-                onClick={handleNextMatch}
-                style={{
-                  width: "100%",
-                  padding: "12px 24px",
-                  fontSize: 18,
-                  border: "none",
-                  borderRadius: 10,
-                  backgroundColor: "#16a34a",
-                  color: "white",
-                  cursor: "pointer"
-                }}
               >
-                次の対戦
-              </button>
-            </div>
                 {savingRequest ? "申請中..." : "勝ち申請"}
               </button>
             </div>
