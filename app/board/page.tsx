@@ -3,31 +3,37 @@
 import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { startCasualMatches } from "@/lib/matches";
+import { DEFAULT_EVENT_ID } from "@/lib/tournamentBoardMatches";
 
-type SavedMatchTablePlayer = {
+type BoardMatch = {
   id: string;
-  name: string;
-  rank?: string;
-  deck?: string;
-};
-
-type SavedMatchTable = {
-  tableNumber: number;
+  eventId: string;
   matchType?: string;
-  started?: boolean;
-  winnerId?: string;
-  pendingWinnerId?: string | null;
-  player1: SavedMatchTablePlayer;
-  player2: SavedMatchTablePlayer;
+  round?: number;
+  player1Id: string;
+  player1Name: string;
+  player2Id: string | null;
+  player2Name: string | null;
+  tableNumber: number;
+  status: "scheduled" | "playing" | "finished";
+  createdAt?: any;
+  updatedAt?: any;
 };
 
-type SavedMatch = {
-  id?: string;
-  matchType: "rank-priority" | "team-random" | "random" | "casual";
-  createdAt: number;
-  tables?: SavedMatchTable[];
-};
+function isAggregateMatchDoc(data: Record<string, unknown>): boolean {
+  return Array.isArray(data.tables);
+}
+
+function isCasualBoardRow(data: Record<string, unknown>): boolean {
+  if (isAggregateMatchDoc(data)) return false;
+  const mt = data.matchType;
+  return mt === "casual" || mt == null || mt === "";
+}
+
+function isTournamentIndividualBoardRow(data: Record<string, unknown>): boolean {
+  if (isAggregateMatchDoc(data)) return false;
+  return data.matchType === "tournament_individual";
+}
 
 const pageStyle: React.CSSProperties = {
   padding: 20,
@@ -81,11 +87,6 @@ const nameStyle: React.CSSProperties = {
   lineHeight: 1.4,
 };
 
-const rankStyle: React.CSSProperties = {
-  marginTop: 6,
-  fontSize: 15,
-  color: "#666",
-};
 const vsStyle: React.CSSProperties = {
   textAlign: "center",
   fontSize: 22,
@@ -94,56 +95,80 @@ const vsStyle: React.CSSProperties = {
   color: "#555",
 };
 
-function getRankLabel(rank?: string) {
-  if (!rank) return "階級未設定";
-  return `${rank}級`;
+function sortByTable(a: BoardMatch, b: BoardMatch) {
+  return a.tableNumber - b.tableNumber;
 }
 
-function getMatchTypeLabel(matchType?: SavedMatch["matchType"]) {
-  if (matchType === "casual") return "交流会マッチ";
-  if (matchType === "rank-priority") return "個人戦（階級優先）";
-  if (matchType === "team-random") return "チーム戦";
-  if (matchType === "random") return "ランダム戦";
-  return "卓振り";
+function MatchGrid({ matches }: { matches: BoardMatch[] }) {
+  if (matches.length === 0) {
+    return (
+      <p style={{ textAlign: "center", fontSize: 16 }}>
+        まだ対戦中の卓はありません
+      </p>
+    );
+  }
+  return (
+    <div style={gridStyle}>
+      {matches.map((match) => (
+        <div key={match.id} style={cardStyle}>
+          <div style={tableNoStyle}>
+            卓{match.tableNumber}
+            {typeof match.round === "number" ? (
+              <span style={{ fontSize: 14, fontWeight: 600, color: "#666" }}>
+                {" "}
+                · Round {match.round}
+              </span>
+            ) : null}
+          </div>
+
+          <div style={playerBoxStyle}>
+            <div style={nameStyle}>{match.player1Name ?? "未設定"}</div>
+          </div>
+
+          <div style={vsStyle}>VS</div>
+
+          <div style={playerBoxStyle}>
+            <div style={nameStyle}>{match.player2Name ?? "未設定"}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function BoardPage() {
-  const [latestMatch, setLatestMatch] = useState<SavedMatch | null>(null);
-  const eventId = "default";
-
-const handleCasualMatchStart = async () => {
-  try {
-    const created = await startCasualMatches(eventId);
-    alert(`交流会マッチを開始しました（${created.length}試合作成）`);
-  } catch (error) {
-    console.error(error);
-    alert("交流会マッチの開始に失敗しました");
-  }
-};
+  const [casualMatches, setCasualMatches] = useState<BoardMatch[]>([]);
+  const [tournamentMatches, setTournamentMatches] = useState<BoardMatch[]>([]);
 
   useEffect(() => {
+    // status で絞る（orderBy("createdAt") だと createdAt 未設定ドキュメントが一覧に出ない）
     const q = query(
-      collection(db, "matchResults"),
-      where("matchType", "==", "casual")
+      collection(db, "events", DEFAULT_EVENT_ID, "matches"),
+      where("status", "==", "playing")
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      if (snapshot.empty) {
-        setLatestMatch(null);
-        return;
-      }
+      const docs = snapshot.docs.map((docSnap) => {
+        const data = docSnap.data() as Record<string, unknown>;
+        return {
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<BoardMatch, "id">),
+          _raw: data,
+        };
+      });
 
-      const docs = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as SavedMatch),
-      }));
+      const casual = docs
+        .filter((m) => isCasualBoardRow(m._raw))
+        .map(({ _raw: _, ...rest }) => rest)
+        .sort(sortByTable);
 
-      docs.sort((a, b) => b.createdAt - a.createdAt);
+      const tournament = docs
+        .filter((m) => isTournamentIndividualBoardRow(m._raw))
+        .map(({ _raw: _, ...rest }) => rest)
+        .sort(sortByTable);
 
-      const latestWithTables = docs.find(
-        (doc) => Array.isArray(doc.tables) && doc.tables.length > 0
-      );
-      setLatestMatch(latestWithTables ?? null);
+      setCasualMatches(casual);
+      setTournamentMatches(tournament);
     });
 
     return () => unsubscribe();
@@ -152,38 +177,42 @@ const handleCasualMatchStart = async () => {
   return (
     <div style={pageStyle}>
       <h1 style={titleStyle}>対戦表</h1>
-      <button onClick={handleCasualMatchStart}>
-  交流会マッチ開始
-</button>
+
+      <h2
+        style={{
+          fontSize: 22,
+          fontWeight: 800,
+          marginTop: 8,
+          marginBottom: 12,
+          textAlign: "center",
+        }}
+      >
+        交流会
+      </h2>
       <div style={subStyle}>
-        {latestMatch ? getMatchTypeLabel(latestMatch.matchType) : "交流会モード"}
+        {casualMatches.length > 0
+          ? `対戦中 ${casualMatches.length}卓`
+          : "現在対戦中の卓はありません"}
       </div>
+      <MatchGrid matches={casualMatches} />
 
-      {!latestMatch ? (
-        <p style={{ textAlign: "center", fontSize: 16 }}>
-          まだ卓振り結果はありません
-        </p>
-      ) : (
-        <div style={gridStyle}>
-          {latestMatch.tables?.map((table) => (
-            <div key={table.tableNumber} style={cardStyle}>
-              <div style={tableNoStyle}>卓{table.tableNumber}</div>
-
-              <div style={playerBoxStyle}>
-                <div style={nameStyle}>{table.player1?.name ?? "未設定"}</div>
-                <div style={rankStyle}>{getRankLabel(table.player1?.rank)}</div>
-              </div>
-
-              <div style={vsStyle}>VS</div>
-
-              <div style={playerBoxStyle}>
-                <div style={nameStyle}>{table.player2?.name ?? "未設定"}</div>
-                <div style={rankStyle}>{getRankLabel(table.player2?.rank)}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <h2
+        style={{
+          fontSize: 22,
+          fontWeight: 800,
+          marginTop: 36,
+          marginBottom: 12,
+          textAlign: "center",
+        }}
+      >
+        大会個人戦
+      </h2>
+      <div style={subStyle}>
+        {tournamentMatches.length > 0
+          ? `対戦中 ${tournamentMatches.length}卓`
+          : "現在対戦中の卓はありません"}
+      </div>
+      <MatchGrid matches={tournamentMatches} />
     </div>
   );
 }

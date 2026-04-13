@@ -5,6 +5,24 @@ import { useRouter } from "next/navigation";
 import { db } from "../lib/firebase";
 import { startCasualMatches } from "@/lib/matches";
 import {
+  pairIndividualRound1,
+  pairIndividualRoundN,
+  type PairablePlayer,
+  type RawPair,
+} from "@/lib/tournamentIndividualPairing";
+import { saveCasualPairingSettings } from "@/lib/casualMatchSettings";
+import {
+  addTournamentIndividualBoardMatches,
+  DEFAULT_EVENT_ID,
+  finishAllPlayingTournamentIndividualBoardMatches,
+  finishTournamentIndividualBoardMatch,
+} from "@/lib/tournamentBoardMatches";
+import {
+  resetAllPlayersToInactive,
+  resetAllPlayersToWaiting,
+  setPlayerInactive,
+} from "@/lib/participants";
+import {
   addDoc,
   collection,
   deleteDoc,
@@ -16,10 +34,28 @@ import {
   updateDoc,
   limit,
   increment,
+  arrayUnion,
   getDoc,
   getDocs,
-  where
+  where,
 } from "firebase/firestore";
+import {
+  PokabuAdminUI,
+  type PokabuAdminMode,
+  type RankCardData,
+  type RecentMatchRow,
+  type WaitingParticipantRow,
+} from "@/components/PokabuAdminUI";
+import { AdminHomeHeaderSlot } from "@/components/admin/AdminHomeHeaderSlot";
+import type { GoodHistoryListItem } from "@/lib/good";
+import type { BadgeId, PlayStyleKey } from "@/lib/playerBadges";
+import {
+  badgesEmojiCompact,
+  normalizeBadges,
+  normalizePlayStyle,
+  participantSummaryLine,
+  playStyleLine,
+} from "@/lib/playerBadges";
 
 type Player = {
   id: string;
@@ -29,11 +65,19 @@ type Player = {
   team?: "A" | "B"
   deck?: string;
   wins?: number;
-  status?: "waiting" | "playing";
+  loss?: number;
+  draw?: number;
+  /** 大会個人戦：過去の対戦相手 id */
+  opponents?: string[];
+  /** ナイス対戦の累計受信数 */
+  goodCount?: number;
+  status?: "waiting" | "playing" | "inactive";
   tags: {
     experience: "none" | "participated" | "winner";
-    playStyle: "enjoy" | "serious";
+    playStyle: PlayStyleKey;
   };
+  playStyle: PlayStyleKey;
+  badges: BadgeId[];
 };
 
 type MatchTable = {
@@ -42,7 +86,7 @@ type MatchTable = {
   player2?: Player;
   player1Team?: "A" | "B";
   player2Team?: "A" | "B";
-  type: "same-rank" | "cross-rank" | "random" | "team-random";
+  type: "same-rank" | "cross-rank" | "random" | "team-random" | "individual";
   started?: boolean;
   pendingWinnerId?: string | null;
   winnerId?: string | null;
@@ -56,7 +100,7 @@ type MatchTable = {
 
 type SavedMatchTable = {
   tableNumber: number;
-  type: "same-rank" | "cross-rank" | "random" | "team-random";
+  type: "same-rank" | "cross-rank" | "random" | "team-random" | "individual";
   player1Team?: "A" | "B";
   player2Team?: "A" | "B";
   started?: boolean;
@@ -77,8 +121,10 @@ type SavedMatchTable = {
       deck?: string;
       tags?: {
         experience: "none" | "participated" | "winner";
-        playStyle: "enjoy" | "serious";
+        playStyle: PlayStyleKey;
       };
+      playStyle?: PlayStyleKey;
+      badges?: BadgeId[];
     }
   | null;
 
@@ -90,250 +136,68 @@ player2:
       deck?: string;
       tags?: {
         experience: "none" | "participated" | "winner";
-        playStyle: "enjoy" | "serious";
+        playStyle: PlayStyleKey;
       };
+      playStyle?: PlayStyleKey;
+      badges?: BadgeId[];
     }
   | null;
 };
 
 type SavedMatch = {
   id: string;
-  matchType: "rank-priority" | "full-random" | "team-random";
+  matchType:
+    | "rank-priority"
+    | "full-random"
+    | "team-random"
+    | "individual-swiss";
+  /** 大会個人戦のラウンド番号 */
+  individualRound?: number | null;
   roundMinutes?: number | null;
   roundStartedAt?: number | null;
   roundEndAt?: number | null;
   tables: SavedMatchTable[];
 };
-const pageWrapStyle: React.CSSProperties = {
-  minHeight: "100vh",
-  background: "#f5f5f7",
-  padding: "16px 12px 40px",
-};
 
-const pageInnerStyle: React.CSSProperties = {
-  maxWidth: 520,
-  margin: "0 auto",
-  display: "grid",
-  gap: 16,
-};
+const EVENT_ID = DEFAULT_EVENT_ID;
+const tournamentMatchesCollection = () =>
+  collection(db, "events", EVENT_ID, "matches");
+const tournamentMatchDocRef = (matchId: string) =>
+  doc(db, "events", EVENT_ID, "matches", matchId);
+const CASUAL_RANK_PRIORITY_KEY = "pokabu-casual-rank-priority";
+const CASUAL_AVOID_REMATCH_KEY = "pokabu-casual-avoid-rematch";
 
-const cardStyle: React.CSSProperties = {
-  background: "#fff",
-  borderRadius: 20,
-  padding: 16,
-  boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-  border: "1px solid #ececec",
-};
-
-const sectionTitleStyle: React.CSSProperties = {
-  fontSize: 16,
-  fontWeight: 800,
-  marginBottom: 12,
-  color: "#111827",
-};
-
-const bigTimerWrapStyle: React.CSSProperties = {
-  ...cardStyle,
-  textAlign: "center",
-};
-
-const teamScoreRowStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr auto",
-  gap: 12,
-  alignItems: "stretch",
-};
-
-const teamAStyle: React.CSSProperties = {
-  background: "#dbeafe",
-  borderRadius: 16,
-  padding: 16,
-  fontSize: 18,
-  fontWeight: 800,
-  textAlign: "center",
-};
-
-const teamBStyle: React.CSSProperties = {
-  background: "#fee2e2",
-  borderRadius: 16,
-  padding: 16,
-  fontSize: 18,
-  fontWeight: 800,
-  textAlign: "center",
-};
-
-const resetBtnStyle: React.CSSProperties = {
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  borderRadius: 16,
-  padding: "0 16px",
-  fontSize: 18,
-  fontWeight: 700,
-  cursor: "pointer",
-};
-
-const modeGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gap: 12,
-  marginTop: 12,
-};
-
-const timerAdjustRowStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "72px 1fr 72px",
-  gap: 12,
-  alignItems: "center",
-  marginTop: 16,
-};
-
-const timerAdjustBtnStyle: React.CSSProperties = {
-  height: 60,
-  borderRadius: 16,
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  fontSize: 32,
-  fontWeight: 700,
-  cursor: "pointer",
-};
-
-const timerCenterStyle: React.CSSProperties = {
-  height: 60,
-  borderRadius: 16,
-  border: "1px solid #e5e7eb",
-  background: "#fff",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: 24,
-  fontWeight: 800,
-};
-
-const primaryBtnStyle: React.CSSProperties = {
-  border: "none",
-  borderRadius: 16,
-  padding: "16px 14px",
-  color: "#fff",
-  fontSize: 18,
-  fontWeight: 800,
-  cursor: "pointer",
-};
-
-const secondaryBtnStyle: React.CSSProperties = {
-  border: "1px solid #d1d5db",
-  borderRadius: 16,
-  padding: "16px 14px",
-  background: "#fff",
-  color: "#111827",
-  fontSize: 18,
-  fontWeight: 800,
-  cursor: "pointer",
-};
-
-const playerScrollStyle: React.CSSProperties = {
-  display: "flex",
-  gap: 12,
-  overflowX: "auto",
-  paddingBottom: 4,
-};
-
-const playerMiniCardStyle: React.CSSProperties = {
-  minWidth: 150,
-  background: "#fff",
-  borderRadius: 16,
-  border: "1px solid #e5e7eb",
-  padding: 14,
-  boxShadow: "0 3px 10px rgba(0,0,0,0.04)",
-  flexShrink: 0,
-};
-const matchListStyle: React.CSSProperties = {
-  display: "grid",
-  gap: 14,
-};
-
-const matchCardStyle: React.CSSProperties = {
-  background: "#fff",
-  borderRadius: 18,
-  border: "1px solid #e5e7eb",
-  padding: 16,
-  boxShadow: "0 6px 18px rgba(0,0,0,0.05)",
-};
-
-const matchHeaderRowStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-  marginBottom: 12,
-};
-
-const statusBadgeStyle = (isPlaying: boolean): React.CSSProperties => ({
-  fontSize: 14,
-  fontWeight: 800,
-  color: isPlaying ? "#2563eb" : "#6b7280",
-});
-
-const versusGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr",
-  gap: 10,
-  marginTop: 12,
-};
-
-const sideCardStyle: React.CSSProperties = {
-  border: "1px solid #e5e7eb",
-  borderRadius: 14,
-  padding: 14,
-  background: "#fafafa",
-};
-
-const winnerBtnStyle = (active: boolean): React.CSSProperties => ({
-  width: "100%",
-  border: "none",
-  borderRadius: 14,
-  padding: "14px 12px",
-  fontSize: 16,
-  fontWeight: 800,
-  color: "#fff",
-  background: active ? "#f59e0b" : "#737373",
-  cursor: "pointer",
-  marginTop: 12,
-});
-
-const dividerStyle: React.CSSProperties = {
-  height: 1,
-  background: "#ececec",
-  margin: "14px 0",
-};
-
-const smallMutedStyle: React.CSSProperties = {
-  fontSize: 14,
-  color: "#6b7280",
-};
-
-const nameStrongStyle: React.CSSProperties = {
-  fontSize: 20,
-  fontWeight: 800,
-  color: "#111827",
-};
 export default function Home() {
-  const getTableStatusLabel = (table: any) => {
-    if (table.finished) return "終了";
-    if (table.started) return "対戦中";
-    return "未開始";
-  };
-  
-  const getTableStatusColor = (table: any) => {
-    if (table.finished) return "#16a34a";
-    if (table.started) return "#2563eb";
-    return "#999999";
-  };
   const router = useRouter();
+  const [casualRankPriority, setCasualRankPriority] = useState(true);
+  const [casualAvoidRematch, setCasualAvoidRematch] = useState(true);
+
   const handleCasualMatch = async () => {
     try {
       setLatestMatch(null);
+      const waitingParticipantsLength = players.filter(
+        (p) => p.status === "waiting"       
+      ).length;
+      const waitingParticipantsForUi = players
+        .filter((p) => p.status === "waiting" )
+        .map((p) => ({
+          id: p.id,
+          status: p.status,
+          currentMatchId: (p as any).currentMatchId ?? null,
+        }));
+      console.log(
+        "[handleCasualMatch] waitingParticipants(ui):",
+        waitingParticipantsForUi
+      );
+      console.log(
+        "[handleCasualMatch] waitingParticipants.length:",
+        waitingParticipantsLength
+      );
   
-      const created = await startCasualMatches("default");
+      const created = await startCasualMatches("default", {
+        rankPriority: casualRankPriority,
+        avoidRematch: casualAvoidRematch,
+      });
   
       alert(`交流会マッチを開始しました（${created.length}試合作成）`);
     } catch (error) {
@@ -345,7 +209,56 @@ export default function Home() {
       );
     }
   };
+  const handleResetPlayers = async () => {
+    if (!confirm("全員を待機状態に戻しますか？")) return;
+  
+    try {
+      const playingMatchesQuery = query(
+        collection(db, "events", "default", "matches"),
+        where("status", "==", "playing")
+      );
+      const playingMatchesSnap = await getDocs(playingMatchesQuery);
+      await Promise.all(
+        playingMatchesSnap.docs.map((docSnap) =>
+          updateDoc(doc(db, "events", "default", "matches", docSnap.id), {
+            status: "finished",
+            updatedAt: serverTimestamp(),
+          })
+        )
+      );
 
+      await resetAllPlayersToWaiting();
+      alert("全員を待機状態に戻しました");
+    } catch (err) {
+      console.error(err);
+      alert("リセットに失敗しました");
+    }
+  };
+  const handleResetAllParticipants = async () => {
+    if (!confirm("全参加者を無効化しますか？")) return;
+
+    try {
+      const playingMatchesQuery = query(
+        collection(db, "events", "default", "matches"),
+        where("status", "==", "playing")
+      );
+      const playingMatchesSnap = await getDocs(playingMatchesQuery);
+      await Promise.all(
+        playingMatchesSnap.docs.map((docSnap) =>
+          updateDoc(doc(db, "events", "default", "matches", docSnap.id), {
+            status: "finished",
+            updatedAt: serverTimestamp(),
+          })
+        )
+      );
+
+      await resetAllPlayersToInactive();
+      alert("全参加者を無効化しました");
+    } catch (err) {
+      console.error(err);
+      alert("参加者リセットに失敗しました");
+    }
+  };
 
   const [players, setPlayers] = useState<Player[]>([]);
   const [latestMatch, setLatestMatch] = useState<SavedMatch | null>(null);
@@ -356,40 +269,87 @@ export default function Home() {
   const [now, setNow] = useState(Date.now());
   const [roundMinutes, setRoundMinutes] = useState(30);
   const [notifiedMarks, setNotifiedMarks] = useState<string[]>([]);
-  const [experience, setExperience] = useState<"none" | "participated" | "winner">("none");
-const [playStyle, setPlayStyle] = useState<"enjoy" | "serious">("enjoy");
-const [openPlayerId, setOpenPlayerId] = useState<string | null>(null);
-const [selectedTeam, setSelectedTeam] = useState<"A" | "B" | null>(null)
-const waitingCount = players.filter(
-  (p) => (p.status ?? "waiting") === "waiting"
-).length;
+  const [selectedTeam, setSelectedTeam] = useState<"A" | "B" | null>(null);
+  const [adminMode, setAdminMode] = useState<PokabuAdminMode>("casual");
+  const [casualRecentMatches, setCasualRecentMatches] = useState<
+    RecentMatchRow[]
+  >([]);
+  const [goodLogsByPlayerId, setGoodLogsByPlayerId] = useState<
+    Record<string, GoodHistoryListItem[]>
+  >({});
+  const waitingCount = players.filter(
+    (p) => p.status === "waiting"
+  ).length;
 
-const playingCount = players.filter(
-  (p) => p.status === "playing"
-).length;
+  const playingCount = players.filter(
+    (p) => p.status === "playing"
+  ).length;
 
-const teamMembers = useMemo(() => {
-  if (!latestMatch || latestMatch.matchType !== "team-random") {
-    return { A: [], B: [] }
-  }
+  const waitingParticipantsList = useMemo((): WaitingParticipantRow[] => {
+    return players
+      .filter((p) => p.status === "waiting")
+      .map((p) => ({
+        id: p.id,
+        name: p.name?.trim() || "（無名）",
+        rank: p.rank?.trim() || "—",
+        badgeSummary: participantSummaryLine(p.playStyle, p.badges),
+      }));
+  }, [players]);
 
-  const aMap = new Map<string, string>()
-  const bMap = new Map<string, string>()
-
-  latestMatch.tables.forEach((table) => {
-    if (table.player1?.id && table.player1?.name) {
-      aMap.set(table.player1.id, table.player1.name)
+  const teamMembers = useMemo(() => {
+    if (!latestMatch || latestMatch.matchType !== "team-random") {
+      return { A: [], B: [] };
     }
-    if (table.player2?.id && table.player2?.name) {
-      bMap.set(table.player2.id, table.player2.name)
-    }
-  })
 
-  return {
-    A: Array.from(aMap.values()),
-    B: Array.from(bMap.values()),
-  }
-}, [latestMatch])
+    const aMap = new Map<string, string>();
+    const bMap = new Map<string, string>();
+
+    latestMatch.tables.forEach((table) => {
+      if (table.player1?.id && table.player1?.name) {
+        aMap.set(table.player1.id, table.player1.name);
+      }
+      if (table.player2?.id && table.player2?.name) {
+        bMap.set(table.player2.id, table.player2.name);
+      }
+    });
+
+    return {
+      A: Array.from(aMap.values()),
+      B: Array.from(bMap.values()),
+    };
+  }, [latestMatch]);
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(CASUAL_RANK_PRIORITY_KEY);
+      if (v === "0") setCasualRankPriority(false);
+      else if (v === "1") setCasualRankPriority(true);
+      const a = localStorage.getItem(CASUAL_AVOID_REMATCH_KEY);
+      if (a === "0") setCasualAvoidRematch(false);
+      else if (a === "1") setCasualAvoidRematch(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        CASUAL_RANK_PRIORITY_KEY,
+        casualRankPriority ? "1" : "0"
+      );
+      localStorage.setItem(
+        CASUAL_AVOID_REMATCH_KEY,
+        casualAvoidRematch ? "1" : "0"
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [casualRankPriority, casualAvoidRematch]);
+
+  useEffect(() => {
+    void saveCasualPairingSettings(casualRankPriority, casualAvoidRematch);
+  }, [casualRankPriority, casualAvoidRematch]);
 
   useEffect(() => {
     const q = collection(db, "players");
@@ -397,7 +357,9 @@ const teamMembers = useMemo(() => {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list: Player[] = snapshot.docs.map((docSnap) => {
         const data = docSnap.data();
-  
+        const playStyle = normalizePlayStyle(data);
+        const badges = normalizeBadges(data);
+
         return {
           id: docSnap.id,
           name: data.name || "",
@@ -405,12 +367,23 @@ const teamMembers = useMemo(() => {
           rank: data.rank || "",
           deck: data.deck || "",
           wins: data.wins || 0,
-          status: data.status || "waiting",
+          loss: typeof data.loss === "number" ? data.loss : 0,
+          draw: typeof data.draw === "number" ? data.draw : 0,
+          opponents: Array.isArray(data.opponents)
+            ? (data.opponents as unknown[]).filter(
+                (x): x is string => typeof x === "string"
+              )
+            : [],
+          goodCount:
+            typeof data.goodCount === "number" ? data.goodCount : 0,
+          status: data.status,
           currentMatchId: data.currentMatchId || null,
           tags: {
             experience: data.tags?.experience || "none",
-            playStyle: data.tags?.playStyle || "enjoy",
+            playStyle,
           },
+          playStyle,
+          badges,
         };
       });
   
@@ -419,12 +392,58 @@ const teamMembers = useMemo(() => {
   
     return () => unsubscribe();
   }, []);
+
   useEffect(() => {
+    if (adminMode !== "casual") {
+      setGoodLogsByPlayerId({});
+      return;
+    }
+    const q = query(
+      collection(db, "events", "default", "goodHistory"),
+      orderBy("createdAt", "desc")
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const byTo: Record<string, GoodHistoryListItem[]> = {};
+      snapshot.docs.forEach((docSnap) => {
+        const data = docSnap.data();
+        const toId = data.toPlayerId as string | undefined;
+        if (!toId) return;
+        const created = data.createdAt as { toMillis?: () => number } | undefined;
+        const entry: GoodHistoryListItem = {
+          id: docSnap.id,
+          fromPlayerName: String(data.fromPlayerName ?? ""),
+          matchId: String(data.matchId ?? ""),
+          tableNumber:
+            typeof data.tableNumber === "number" ? data.tableNumber : null,
+          createdAtMs:
+            typeof created?.toMillis === "function"
+              ? created.toMillis()
+              : null,
+        };
+        if (!byTo[toId]) byTo[toId] = [];
+        byTo[toId].push(entry);
+      });
+      for (const k of Object.keys(byTo)) {
+        byTo[k].sort(
+          (a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0)
+        );
+      }
+      setGoodLogsByPlayerId(byTo);
+    });
+    return () => unsubscribe();
+  }, [adminMode]);
+
+  useEffect(() => {
+    if (adminMode !== "tournament") {
+      setTeamResults([]);
+      return;
+    }
+
     const q = query(
       collection(db, "matchResults"),
       where("matchType", "==", "team-random")
     );
-  
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setTeamResults(
         snapshot.docs.map((docSnap) => ({
@@ -433,24 +452,50 @@ const teamMembers = useMemo(() => {
         }))
       );
     });
-  
-    return () => unsubscribe();
-  }, []);
-  useEffect(() => {
-    const q = query(collection(db, "matches"), orderBy("createdAt", "desc"), limit(1));
 
+    return () => {
+      unsubscribe();
+      setTeamResults([]);
+    };
+  }, [adminMode]);
+
+  useEffect(() => {
+    if (adminMode !== "tournament") {
+      setLatestMatch(null);
+      return;
+    }
+
+    // 卓ごとのフラット doc（casual / tournament_individual）も同一コレクションにあるため、
+    // createdAt 最新1件だけ取ると個人戦直後は tournament_individual が先頭になり tables が空になる。
+    const q = query(
+      collection(db, "events", EVENT_ID, "matches"),
+      orderBy("createdAt", "desc"),
+      limit(50)
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       if (snapshot.empty) {
         setLatestMatch(null);
         return;
       }
 
-      const latestDoc = snapshot.docs[0];
+      const latestDoc = snapshot.docs.find((docSnap) => {
+        const data = docSnap.data();
+        return Array.isArray(data.tables);
+      });
+      if (!latestDoc) {
+        setLatestMatch(null);
+        return;
+      }
+
       const data = latestDoc.data();
 
       setLatestMatch({
         id: latestDoc.id,
         matchType: data.matchType || "rank-priority",
+        individualRound:
+          typeof data.individualRound === "number"
+            ? data.individualRound
+            : null,
         roundMinutes: data.roundMinutes ?? 30,
         roundStartedAt: data.roundStartedAt ?? null,
         roundEndAt: data.roundEndAt ?? null,
@@ -458,16 +503,44 @@ const teamMembers = useMemo(() => {
       });
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      setLatestMatch(null);
+    };
+  }, [adminMode]);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, "events", "default", "matches"),
+      where("status", "==", "playing")
+    );
+    return onSnapshot(q, (snapshot) => {
+      const rows: RecentMatchRow[] = snapshot.docs
+        .map((docSnap) => {
+          const d = docSnap.data();
+          const tableNumber =
+            typeof d.tableNumber === "number" ? d.tableNumber : 0;
+          const player1 =
+            typeof d.player1Name === "string" ? d.player1Name : "—";
+          const player2 =
+            typeof d.player2Name === "string" ? d.player2Name : "—";
+          return { tableNumber, player1, player2 };
+        })
+        .sort((a, b) => a.tableNumber - b.tableNumber)
+        .slice(0, 3);
+      setCasualRecentMatches(rows);
+    });
   }, []);
 
   useEffect(() => {
+    if (adminMode !== "tournament") return;
+
     const timer = setInterval(() => {
       setNow(Date.now());
     }, 1000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [adminMode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -484,59 +557,22 @@ const teamMembers = useMemo(() => {
     setNotifiedMarks([]);
   }, [latestMatch?.id, latestMatch?.roundStartedAt, latestMatch?.roundEndAt]);
 
-  const shuffleArray = (array: Player[]) => {
-    const copied = [...array];
-    for (let i = copied.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [copied[i], copied[j]] = [copied[j], copied[i]];
-    }
-    return copied;
-  };
-
-  const pairSameRank = (
-    list: Player[],
-    startTableNumber: number
-  ): { tables: MatchTable[]; leftover?: Player; nextTableNumber: number } => {
-    const shuffled = shuffleArray(list);
-    const result: MatchTable[] = [];
-    let tableNumber = startTableNumber;
-
-    for (let i = 0; i + 1 < shuffled.length; i += 2) {
-      result.push({
-        tableNumber,
-        player1: shuffled[i],
-        player2: shuffled[i + 1],
-        type: "same-rank",
-        started: false,
-        pendingWinnerId: null,
-        winnerId: null,
-        reportedById: null,
-        reportedOpponentDeck: null,
-        reportedWinnerSide: null,
-        reportedLoserSide: null,
-        reportedWinnerDeck: null,
-      });
-      tableNumber++;
-    }
-
-    const leftover =
-      shuffled.length % 2 === 1 ? shuffled[shuffled.length - 1] : undefined;
-
-    return {
-      tables: result,
-      leftover,
-      nextTableNumber: tableNumber,
-    };
-  };
-
   const saveMatches = async (
-    matchType: "rank-priority" | "full-random" | "team-random",
-    matchTables: MatchTable[]
-  ) => {
+    matchType:
+      | "rank-priority"
+      | "full-random"
+      | "team-random"
+      | "individual-swiss",
+    matchTables: MatchTable[],
+    options?: { individualRound?: number }
+  ): Promise<string | undefined> => {
     setSaving(true);
     try {
-      await addDoc(collection(db, "matches"), {
+      const created = await addDoc(tournamentMatchesCollection(), {
         matchType,
+        ...(options?.individualRound != null
+          ? { individualRound: options.individualRound }
+          : {}),
         createdAt: serverTimestamp(),
         roundMinutes,
         roundStartedAt: null,
@@ -562,8 +598,10 @@ const teamMembers = useMemo(() => {
               deck: table.player1.deck || "",
               tags: table.player1.tags ?? {
                 experience: "none",
-                playStyle: "enjoy",
+                playStyle: table.player1.playStyle ?? "enjoy",
               },
+              playStyle: table.player1.playStyle ?? "enjoy",
+              badges: table.player1.badges ?? [],
             }
           : null,
           player2: table.player2
@@ -574,178 +612,141 @@ const teamMembers = useMemo(() => {
       deck: table.player2.deck || "",
       tags: table.player2.tags ?? {
         experience: "none",
-        playStyle: "enjoy",
+        playStyle: table.player2.playStyle ?? "enjoy",
       },
+      playStyle: table.player2.playStyle ?? "enjoy",
+      badges: table.player2.badges ?? [],
     }
   : null,
         })),
       });
+      return created.id;
     } finally {
       setSaving(false);
     }
   };
 
-  const handleRankPriorityMatch = async () => {
-    const monsterPlayers = players.filter((player) => player.rank === "モンスターボール級");
-    const superPlayers = players.filter((player) => player.rank === "スーパーボール級");
-    const hyperPlayers = players.filter((player) => player.rank === "ハイパーボール級");
+  const toPairablePlayer = (p: Player): PairablePlayer => ({
+    id: p.id,
+    name: p.name,
+    rank: p.rank,
+    wins: p.wins ?? 0,
+    opponents: p.opponents ?? [],
+  });
 
-    let tableNumber = 1;
-    const finalTables: MatchTable[] = [];
-
-    const monsterResult = pairSameRank(monsterPlayers, tableNumber);
-    finalTables.push(...monsterResult.tables);
-    tableNumber = monsterResult.nextTableNumber;
-
-    const superResult = pairSameRank(superPlayers, tableNumber);
-    finalTables.push(...superResult.tables);
-    tableNumber = superResult.nextTableNumber;
-
-    const hyperResult = pairSameRank(hyperPlayers, tableNumber);
-    finalTables.push(...hyperResult.tables);
-    tableNumber = hyperResult.nextTableNumber;
-
-    if (monsterResult.leftover && superResult.leftover) {
-      finalTables.push({
-        tableNumber,
-        player1: monsterResult.leftover,
-        player2: superResult.leftover,
-        type: "cross-rank",
+  const rawPairsToMatchTables = (
+    pairs: RawPair[],
+    byId: Map<string, Player>
+  ): MatchTable[] =>
+    pairs.map((pair) => {
+      const p1 = byId.get(pair.player1.id);
+      if (!p1) throw new Error("player1 not found");
+      if (!pair.player2) {
+        return {
+          tableNumber: pair.tableNumber,
+          player1: p1,
+          player2: undefined,
+          type: "individual",
+          started: true,
+          winnerId: p1.id,
+          pendingWinnerId: null,
+          reportedById: null,
+          reportedOpponentDeck: null,
+          reportedWinnerSide: null,
+          reportedLoserSide: null,
+          reportedWinnerDeck: null,
+        };
+      }
+      const p2 = byId.get(pair.player2.id);
+      if (!p2) throw new Error("player2 not found");
+      return {
+        tableNumber: pair.tableNumber,
+        player1: p1,
+        player2: p2,
+        type: "individual",
         started: false,
-        pendingWinnerId: null,
         winnerId: null,
+        pendingWinnerId: null,
         reportedById: null,
         reportedOpponentDeck: null,
         reportedWinnerSide: null,
         reportedLoserSide: null,
         reportedWinnerDeck: null,
-      });
-      tableNumber++;
-      monsterResult.leftover = undefined;
-      superResult.leftover = undefined;
-    }
-    const handleCasualMatch = async () => {
-      if (!players || players.length < 2) {
-        alert("参加者が足りません");
-        return;
-      }
-    
-      // waiting プレイヤーだけ取得
-      const waitingPlayers = players.filter(
-        (p) => (p.status ?? "waiting") === "waiting"
-      );
-    
-      if (waitingPlayers.length < 2) {
-        alert("待機プレイヤーが足りません");
-        return;
-      }
-    
-      // シャッフル
-      const shuffled = [...waitingPlayers].sort(() => Math.random() - 0.5);
-    
-      const tables = [];
-    
-      let tableNumber = 1;
-    
-      for (let i = 0; i < shuffled.length - 1; i += 2) {
-        const player1 = shuffled[i];
-        const player2 = shuffled[i + 1];
-    
-        tables.push({
-          tableNumber,
-          player1,
-          player2,
-          started: false,
-          matchType: "casual",
-        });
-    
-        tableNumber++;
-      }
-    
-      const newMatch = {
-        matchType: "casual",
-        createdAt: Date.now(),
-        tables,
       };
-    
-      await addDoc(collection(db, "matchResults"), newMatch);
-    };
-    if (superResult.leftover && hyperResult.leftover) {
-      finalTables.push({
-        tableNumber,
-        player1: superResult.leftover,
-        player2: hyperResult.leftover,
-        type: "cross-rank",
-        started: false,
-        pendingWinnerId: null,
-        winnerId: null,
-        reportedById: null,
-        reportedOpponentDeck: null,
-        reportedWinnerSide: null,
-        reportedLoserSide: null,
-        reportedWinnerDeck: null,
-      });
-      tableNumber++;
-      superResult.leftover = undefined;
-      hyperResult.leftover = undefined;
+    });
+
+  const handleIndividualSwissRound = async () => {
+    const active = players.filter((p) => p.status !== "inactive");
+    if (active.length < 2) {
+      alert("大会に参加できる参加者が2人未満です（無効化を除く）");
+      return;
     }
 
-    if (monsterResult.leftover) {
-      finalTables.push({
-        tableNumber,
-        player1: monsterResult.leftover,
-        player2: undefined,
-        type: "cross-rank",
-        started: false,
-        pendingWinnerId: null,
-        winnerId: null,
-        reportedById: null,
-        reportedOpponentDeck: null,
-        reportedWinnerSide: null,
-        reportedLoserSide: null,
-        reportedWinnerDeck: null,
+    if (latestMatch?.matchType === "individual-swiss") {
+      const allDone = latestMatch.tables.every((t) => {
+        if (!t.player1) return true;
+        if (!t.player2) return !!t.winnerId;
+        return !!t.winnerId;
       });
-      tableNumber++;
+      if (!allDone) {
+        alert(
+          "現在のラウンドが未終了です。全卓の勝敗を確定してから個人戦を押してください。"
+        );
+        return;
+      }
     }
 
-    if (superResult.leftover) {
-      finalTables.push({
-        tableNumber,
-        player1: superResult.leftover,
-        player2: undefined,
-        type: "cross-rank",
-        started: false,
-        pendingWinnerId: null,
-        winnerId: null,
-        reportedById: null,
-        reportedOpponentDeck: null,
-        reportedWinnerSide: null,
-        reportedLoserSide: null,
-        reportedWinnerDeck: null,
-      });
-      tableNumber++;
+    let nextRound = 1;
+    if (latestMatch?.matchType === "individual-swiss") {
+      nextRound = (latestMatch.individualRound ?? 1) + 1;
+    } else if (latestMatch) {
+      const ok = window.confirm(
+        "現在表示中の大会データは個人戦ラウンド制ではありません。個人戦を開始すると Round 1 として新しい卓組みを追加します。よろしいですか？"
+      );
+      if (!ok) return;
     }
 
-    if (hyperResult.leftover) {
-      finalTables.push({
-        tableNumber,
-        player1: hyperResult.leftover,
-        player2: undefined,
-        type: "cross-rank",
-        started: false,
-        pendingWinnerId: null,
-        winnerId: null,
-        reportedById: null,
-        reportedOpponentDeck: null,
-        reportedWinnerSide: null,
-        reportedLoserSide: null,
-        reportedWinnerDeck: null,
-      });
-    }
+    const pairable = active.map(toPairablePlayer);
+    const byId = new Map(active.map((p) => [p.id, p]));
 
-    await saveMatches("rank-priority", finalTables);
+    const rawPairs =
+      nextRound === 1
+        ? pairIndividualRound1(pairable)
+        : pairIndividualRoundN(pairable);
+
+    try {
+      await finishAllPlayingTournamentIndividualBoardMatches(EVENT_ID);
+      const tables = rawPairsToMatchTables(rawPairs, byId);
+      await saveMatches("individual-swiss", tables, {
+        individualRound: nextRound,
+      });
+      const boardTables = tables
+        .filter((t) => t.player1 && t.player2)
+        .map((t) => ({
+          tableNumber: t.tableNumber,
+          player1Id: t.player1!.id,
+          player1Name: t.player1!.name,
+          player2Id: t.player2!.id,
+          player2Name: t.player2!.name,
+        }));
+      await addTournamentIndividualBoardMatches(EVENT_ID, nextRound, boardTables);
+      for (const t of tables) {
+        if (!t.player2 && t.winnerId) {
+          await updateDoc(doc(db, "players", t.winnerId), {
+            wins: increment(1),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+      alert(
+        `Round ${nextRound} の卓組みを保存しました。ラウンド開始でタイマーを開始できます。`
+      );
+    } catch (e) {
+      console.error(e);
+      alert("個人戦の卓組みに失敗しました");
+    }
   };
-// 👇 ここに追加（360の上）
+
 const handleTeamRandomMatch = async () => {
   const grouped: Record<string, Player[]> = {};
 
@@ -789,30 +790,6 @@ const handleTeamRandomMatch = async () => {
   await saveMatches("team-random", tables);
 };
 
-// 👇 既存（そのまま）
-const handleFullRandomMatch = async () => {
-    const shuffled = shuffleArray(players);
-    const newTables: MatchTable[] = [];
-
-    for (let i = 0; i < shuffled.length; i += 2) {
-      newTables.push({
-        tableNumber: newTables.length + 1,
-        player1: shuffled[i],
-        player2: shuffled[i + 1],
-        type: "random",
-        started: false,
-        pendingWinnerId: null,
-        winnerId: null,
-        reportedById: null,
-        reportedOpponentDeck: null,
-        reportedWinnerSide: null,
-        reportedLoserSide: null,
-        reportedWinnerDeck: null,
-      });
-    }
-
-    await saveMatches("full-random", newTables);
-  };
   const handleResetTeamCounts = async () => {
     const ok = window.confirm("チーム戦の勝数カウントをリセットしますか？");
     if (!ok) return;
@@ -851,7 +828,7 @@ const handleFullRandomMatch = async () => {
         started: true,
       }));
 
-      await updateDoc(doc(db, "matches", latestMatch.id), {
+      await updateDoc(tournamentMatchDocRef(latestMatch.id), {
         roundMinutes,
         roundStartedAt: startedAt,
         roundEndAt: endAt,
@@ -877,7 +854,7 @@ const handleFullRandomMatch = async () => {
           : table
       );
 
-      await updateDoc(doc(db, "matches", latestMatch.id), {
+      await updateDoc(tournamentMatchDocRef(latestMatch.id), {
         tables: updatedTables,
       });
     } finally {
@@ -903,19 +880,16 @@ const handleFullRandomMatch = async () => {
           : table
       );
 
-      await updateDoc(doc(db, "matches", latestMatch.id), {
+      await updateDoc(tournamentMatchDocRef(latestMatch.id), {
         tables: updatedTables,
       });
 
-      const winnerId = targetTable.pendingWinnerId;
-      if (winnerId) {
-        const winnerRef = doc(db, "players", winnerId);
-        const winnerSnap = await getDoc(winnerRef);
-        if (winnerSnap.exists()) {
-          await updateDoc(winnerRef, {
-            wins: increment(1),
-          });
-        }
+      if (latestMatch.matchType === "individual-swiss") {
+        await finishTournamentIndividualBoardMatch(
+          EVENT_ID,
+          latestMatch.individualRound ?? 1,
+          tableNumber
+        );
       }
 
       const winnerPlayer =
@@ -927,6 +901,36 @@ const handleFullRandomMatch = async () => {
         targetTable.player1?.id === targetTable.pendingWinnerId
           ? targetTable.player2
           : targetTable.player1;
+
+      const winnerId = targetTable.pendingWinnerId;
+      if (winnerId) {
+        const winnerRef = doc(db, "players", winnerId);
+        const winnerSnap = await getDoc(winnerRef);
+        if (winnerSnap.exists()) {
+          if (
+            latestMatch.matchType === "individual-swiss" &&
+            loserPlayer?.id
+          ) {
+            const loserRef = doc(db, "players", loserPlayer.id);
+            await Promise.all([
+              updateDoc(winnerRef, {
+                wins: increment(1),
+                opponents: arrayUnion(loserPlayer.id),
+                updatedAt: serverTimestamp(),
+              }),
+              updateDoc(loserRef, {
+                loss: increment(1),
+                opponents: arrayUnion(winnerId),
+                updatedAt: serverTimestamp(),
+              }),
+            ]);
+          } else {
+            await updateDoc(winnerRef, {
+              wins: increment(1),
+            });
+          }
+        }
+      }
 
       await addDoc(collection(db, "matchResults"), {
         matchId: latestMatch.id,
@@ -985,9 +989,16 @@ const handleFullRandomMatch = async () => {
           : table
       );
 
-      await updateDoc(doc(db, "matches", latestMatch.id), {
+      await updateDoc(tournamentMatchDocRef(latestMatch.id), {
         tables: updatedTables,
       });
+      if (latestMatch.matchType === "individual-swiss") {
+        await finishTournamentIndividualBoardMatch(
+          EVENT_ID,
+          latestMatch.individualRound ?? 1,
+          tableNumber
+        );
+      }
       await addDoc(collection(db, "matchResults"), {
         matchId: latestMatch.id,
         tableNumber: winnerTable?.tableNumber ?? tableNumber,
@@ -1019,88 +1030,30 @@ const handleFullRandomMatch = async () => {
     }
   };
 
-  const grouped = {
-    monster: players.filter((player) => player.rank === "モンスターボール級"),
-    super: players.filter((player) => player.rank === "スーパーボール級"),
-    hyper: players.filter((player) => player.rank === "ハイパーボール級"),
-  };
-
-
-const renderPlayers = (list: Player[]) => {
-  if (list.length === 0) {
-    return <p>まだ参加者はいません</p>;
-  }
-
-  return (
-    <div style={{ display: "grid", gap: 8 }}>
-      {list.map((player) => {
-        const isOpen = openPlayerId === player.id;
-
-        return (
-          <div
-            key={player.id}
-            style={{
-              border: "1px solid #ccc",
-              borderRadius: 12,
-              background: "#fff",
-            }}
-          >
-            <div
-  onClick={() => setOpenPlayerId(isOpen ? null : player.id)}
-  style={{
-    padding: 12,
-    fontSize: 16,
-    fontWeight: "bold",
-    cursor: "pointer",
-    height: 56,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    textAlign: "center"
-  }}
-
-            >
-              {player.name} 
-            </div>
-
-            {isOpen && (
-              <div style={{ padding: "0 16px 16px", fontSize: 14 }}>
-                <div>階級：{player.rank}</div>
-                <div>プレイ歴：{player.history}</div>
-                <div>使用デッキ：{player.deck || "未設定"}</div>
-                <div>勝数：{player.wins ?? 0}</div>
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-};
-
   const renderTypeLabel = (
-    type: "same-rank" | "cross-rank" | "random" | "team-random"
+    type: "same-rank" | "cross-rank" | "random" | "team-random" | "individual"
   ) => {
     if (type === "same-rank") return "同階級";
     if (type === "cross-rank") return "階級またぎ";
     if (type === "team-random") return "チーム戦ランダム";
+    if (type === "individual") return "個人戦";
     return "完全ランダム";
   };
 
   const getStatusLabel = (table: SavedMatchTable) => {
     if ((table as any).finished) {
-      return { text: "終了", color: "#16a34a" };
+      return { text: "終了", color: "#4ade80" };
     }
     if (table.winnerId) {
-      return { text: "承認済み", color: "#16a34a" };
+      return { text: "承認済み", color: "#4ade80" };
     }
     if (table.pendingWinnerId) {
-      return { text: "勝利申請中", color: "orange" };
+      return { text: "勝利申請中", color: "#fb923c" };
     }
     if (table.started) {
-      return { text: "対戦中", color: "#2563eb" };
+      return { text: "対戦中", color: "#93c5fd" };
     }
-    return { text: "未開始", color: "#999" };
+    return { text: "未開始", color: "#94a3b8" };
   };
 
   const getPlayerBoxStyle = (
@@ -1110,28 +1063,32 @@ const renderPlayers = (list: Player[]) => {
   ) => {
     if (!playerId) {
       return {
-        border: "1px solid #ddd",
-        backgroundColor: "#fafafa",
+        border: "1px solid rgba(168, 85, 247, 0.35)",
+        backgroundColor: "rgba(255, 255, 255, 0.06)",
+        color: "#e5e7eb",
       };
     }
 
     if (winnerId === playerId) {
       return {
-        border: "2px solid #22c55e",
-        backgroundColor: "#dcfce7",
+        border: "2px solid #4ade80",
+        backgroundColor: "rgba(74, 222, 128, 0.12)",
+        color: "#e5e7eb",
       };
     }
 
     if (pendingWinnerId === playerId) {
       return {
-        border: "2px solid orange",
-        backgroundColor: "#ffedd5",
+        border: "2px solid #fb923c",
+        backgroundColor: "rgba(251, 146, 60, 0.12)",
+        color: "#e5e7eb",
       };
     }
 
     return {
-      border: "1px solid #ddd",
-      backgroundColor: "#fafafa",
+      border: "1px solid rgba(168, 85, 247, 0.35)",
+      backgroundColor: "rgba(255, 255, 255, 0.06)",
+      color: "#e5e7eb",
     };
   };
 
@@ -1207,6 +1164,46 @@ const renderPlayers = (list: Player[]) => {
     return { A: aWins, B: bWins };
   }, [teamResults]);
 
+  const rankCardsData = useMemo((): RankCardData[] => {
+    const byRank = (rank: string) =>
+      players.filter((p) => p.status !== "inactive" && p.rank === rank);
+    const mk = (
+      list: Player[],
+      key: RankCardData["key"],
+      label: string
+    ): RankCardData => ({
+      key,
+      label,
+      total: list.length,
+      waiting: list.filter((p) => p.status === "waiting").length,
+      playing: list.filter((p) => p.status === "playing").length,
+      participants: list.map((p) => ({
+        id: p.id,
+        name: p.name,
+        badgeSummary: participantSummaryLine(p.playStyle, p.badges),
+      })),
+    });
+    return [
+      mk(byRank("モンスターボール級"), "monster", "モンスターボール級"),
+      mk(byRank("スーパーボール級"), "super", "スーパーボール級"),
+      mk(byRank("ハイパーボール級"), "hyper", "ハイパーボール級"),
+    ];
+  }, [players]);
+
+  const goodRankingRows = useMemo(() => {
+    return [...players]
+      .map((p) => ({
+        playerId: p.id,
+        name: (p.name || "").trim() || "（無名）",
+        goodCount: p.goodCount ?? 0,
+      }))
+      .sort(
+        (a, b) =>
+          b.goodCount - a.goodCount || a.name.localeCompare(b.name, "ja")
+      )
+      .map((row, i) => ({ rank: i + 1, ...row }));
+  }, [players]);
+
   const getPendingPlayerName = (table: SavedMatchTable) => {
     if (!table.pendingWinnerId) return null;
     if (table.pendingWinnerId === table.player1?.id) return table.player1?.name || null;
@@ -1214,104 +1211,101 @@ const renderPlayers = (list: Player[]) => {
     return null;
   };
 
+  const tournamentGridCounts = useMemo(() => {
+    if (!latestMatch?.tables?.length) {
+      return { playing: 0, finished: 0 };
+    }
+    let playing = 0;
+    let finished = 0;
+    for (const t of latestMatch.tables) {
+      if (!t.player1) continue;
+      if (t.winnerId) finished++;
+      else playing++;
+    }
+    return { playing, finished };
+  }, [latestMatch]);
+
+  const tournamentRecentRows = useMemo((): RecentMatchRow[] => {
+    if (!latestMatch?.tables?.length) return [];
+    return latestMatch.tables.slice(0, 3).map((t) => ({
+      tableNumber: t.tableNumber,
+      player1: t.player1?.name?.trim() || "—",
+      player2: t.player2?.name?.trim() || "不戦勝",
+    }));
+  }, [latestMatch]);
+
   return (
-    
-    <div
-  
-    style={{
-      padding: 20,
-      fontFamily: "sans-serif",
-      maxWidth: 420,
-      width: "100%",
-      margin: "0 auto",
-    }}
-    >
-      <h1 style={{ marginBottom: 20, textAlign: "center" }}>ぽか部運営画面</h1>
-
-      <div style={{ textAlign: "center", marginBottom: 20 }}>
-        <button
-          onClick={() => router.push("/results")}
-          style={{
-            padding: "10px 20px",
-            fontSize: 16,
-            borderRadius: 8,
-            border: "1px solid #ccc",
-            backgroundColor: "#fff",
-            cursor: "pointer",
-          }}
-        >
-          📊 試合結果一覧を見る
-        </button>
-      </div>
-
-      <div style={{ textAlign: "center", marginBottom: 20 }}>
-        <button
-          onClick={() => router.push("/ranking")}
-          style={{
-            padding: "10px 20px",
-            fontSize: 16,
-            borderRadius: 8,
-            border: "1px solid #ccc",
-            backgroundColor: "#fff",
-            cursor: "pointer",
-          }}
-        >
-          🏆 ランキングを見る
-        </button>
-      </div>
-      
-
-      <div
-        style={{
-          textAlign: "center",
-          marginBottom: 20,
-          fontSize: 28,
-          fontWeight: "bold",
-          color:
-            remainingSeconds === null
-              ? "#999"
-              : remainingSeconds === 0
-              ? "#dc2626"
-              : "#2563eb",
+    <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#312e81] to-[#4c1d95]">
+      <PokabuAdminUI
+        mode={adminMode}
+        onModeChange={setAdminMode}
+        waitingCount={waitingCount}
+        playingCount={playingCount}
+        tournamentGridCounts={tournamentGridCounts}
+        waitingParticipants={waitingParticipantsList}
+        rankCards={rankCardsData}
+        recentMatches={
+          adminMode === "tournament" ? tournamentRecentRows : casualRecentMatches
+        }
+        onCasualMatch={() => void handleCasualMatch()}
+        onForceWaiting={() => void handleResetPlayers()}
+        onShowMoreMatches={() => router.push("/board")}
+        onDeactivateParticipant={async (id) => {
+          try {
+            await setPlayerInactive(id);
+          } catch (error) {
+            console.error(error);
+            alert("無効化に失敗しました");
+          }
         }}
-      >
-        ラウンドタイマー：{timerText}
-      </div>
-      <div
-  style={{
-    display: "flex",
-    justifyContent: "center",
-    gap: 12,
-    marginBottom: 20,
-    flexWrap: "wrap",
-  }}
->
-  <div
-    style={{
-      padding: "10px 16px",
-      borderRadius: 12,
-      background: "#ecfdf5",
-      fontWeight: "bold",
-      fontSize: 16,
-      border: "1px solid #bbf7d0",
-    }}
-  >
-    待機中：{waitingCount}人
-  </div>
-
-  <div
-    style={{
-      padding: "10px 16px",
-      borderRadius: 12,
-      background: "#eff6ff",
-      fontWeight: "bold",
-      fontSize: 16,
-      border: "1px solid #bfdbfe",
-    }}
-  >
-    対戦中：{playingCount}人
-  </div>
-</div>
+        casualRankPriority={casualRankPriority}
+        onCasualRankPriorityChange={setCasualRankPriority}
+        casualAvoidRematch={casualAvoidRematch}
+        onCasualAvoidRematchChange={setCasualAvoidRematch}
+        goodRankingRows={goodRankingRows}
+        goodLogsByPlayerId={goodLogsByPlayerId}
+        headerSlot={
+          adminMode === "tournament" ? (
+            <AdminHomeHeaderSlot
+              adminMode={adminMode}
+              remainingSeconds={remainingSeconds}
+              timerText={timerText}
+              onResultsClick={() => router.push("/results")}
+              onRankingClick={() => router.push("/ranking")}
+            />
+          ) : undefined
+        }
+        resetSlot={
+          <div className="rounded-xl border border-purple-400/30 bg-white/10 p-5 text-left shadow-[0_0_20px_rgba(168,85,247,0.3)] backdrop-blur-md">
+            <p className="mb-4 text-sm text-gray-300">
+              全参加者を無効化し、進行中の交流会マッチも終了扱いにします。
+            </p>
+            <button
+              type="button"
+              onClick={() => void handleResetAllParticipants()}
+              className="min-h-[52px] w-full rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-3 text-base font-bold text-white shadow-[0_0_18px_rgba(168,85,247,0.55)]"
+            >
+              全員参加者リセット
+            </button>
+          </div>
+        }
+        tournamentSlot={
+          <div className="space-y-5 text-gray-300">
+      {latestMatch?.matchType === "individual-swiss" &&
+      latestMatch.individualRound != null ? (
+        <div
+          style={{
+            textAlign: "center",
+            marginBottom: 16,
+            fontSize: 22,
+            fontWeight: "bold",
+            color: "#ffffff",
+            letterSpacing: "0.02em",
+          }}
+        >
+          Round {latestMatch.individualRound}
+        </div>
+      ) : null}
       {latestMatch?.matchType === "team-random" && (
   <div
     style={{
@@ -1321,6 +1315,7 @@ const renderPlayers = (list: Player[]) => {
       marginBottom: 20,
       fontWeight: "bold",
       fontSize: 18,
+      color: "#ffffff",
     }}
   >
     
@@ -1335,7 +1330,9 @@ const renderPlayers = (list: Player[]) => {
   <div
   onClick={() => setSelectedTeam(selectedTeam === "A" ? null : "A")}
   style={{
-    background: "#dbeafe",
+    background: "rgba(56, 189, 248, 0.2)",
+    border: "1px solid rgba(56, 189, 248, 0.45)",
+    color: "#ffffff",
     padding: "12px 16px",
     borderRadius: 12,
     fontSize: 16,
@@ -1350,7 +1347,9 @@ const renderPlayers = (list: Player[]) => {
 <div
   onClick={() => setSelectedTeam(selectedTeam === "B" ? null : "B")}
   style={{
-    background: "#fee2e2",
+    background: "rgba(244, 114, 182, 0.2)",
+    border: "1px solid rgba(244, 114, 182, 0.45)",
+    color: "#ffffff",
     padding: "12px 16px",
     borderRadius: 12,
     fontSize: 16,
@@ -1368,8 +1367,9 @@ const renderPlayers = (list: Player[]) => {
   style={{
     padding: "12px 16px",
     borderRadius: 12,
-    border: "1px solid #ccc",
-    background: "#fff",
+    border: "1px solid rgba(168, 85, 247, 0.45)",
+    background: "rgba(255, 255, 255, 0.08)",
+    color: "#ffffff",
     cursor: "pointer",
     fontSize: 16,
     fontWeight: "bold",
@@ -1386,12 +1386,14 @@ const renderPlayers = (list: Player[]) => {
       marginTop: 16,
       marginBottom: 20,
       padding: 16,
-      border: "1px solid #ddd",
+      border: "1px solid rgba(168, 85, 247, 0.35)",
       borderRadius: 12,
-      background: "#fff",
+      background: "rgba(255, 255, 255, 0.08)",
+      boxShadow: "0 0 20px rgba(168, 85, 247, 0.2)",
+      color: "#e5e7eb",
     }}
   >
-    <div style={{ fontWeight: "bold", marginBottom: 10 }}>
+    <div style={{ fontWeight: "bold", marginBottom: 10, color: "#ffffff" }}>
       {selectedTeam === "A" ? "チームAメンバー" : "チームBメンバー"}
     </div>
 
@@ -1404,9 +1406,10 @@ const renderPlayers = (list: Player[]) => {
             key={name}
             style={{
               padding: "10px 12px",
-              border: "1px solid #eee",
+              border: "1px solid rgba(168, 85, 247, 0.25)",
               borderRadius: 10,
-              background: "#fafafa",
+              background: "rgba(255, 255, 255, 0.05)",
+              color: "#e5e7eb",
             }}
           >
             {name}
@@ -1434,9 +1437,10 @@ const renderPlayers = (list: Player[]) => {
           style={{
             width: 42,
             height: 42,
-            border: "1px solid #ccc",
+            border: "1px solid rgba(168, 85, 247, 0.45)",
             borderRadius: 8,
-            backgroundColor: "#fff",
+            backgroundColor: "rgba(255, 255, 255, 0.1)",
+            color: "#ffffff",
             fontSize: 20,
             cursor: "pointer",
           }}
@@ -1450,6 +1454,7 @@ const renderPlayers = (list: Player[]) => {
             textAlign: "center",
             fontSize: 20,
             fontWeight: "bold",
+            color: "#ffffff",
           }}
         >
           {roundMinutes}分
@@ -1460,9 +1465,10 @@ const renderPlayers = (list: Player[]) => {
           style={{
             width: 42,
             height: 42,
-            border: "1px solid #ccc",
+            border: "1px solid rgba(168, 85, 247, 0.45)",
             borderRadius: 8,
-            backgroundColor: "#fff",
+            backgroundColor: "rgba(255, 255, 255, 0.1)",
+            color: "#ffffff",
             fontSize: 20,
             cursor: "pointer",
           }}
@@ -1480,7 +1486,8 @@ const renderPlayers = (list: Player[]) => {
   }}
       >
         <button
-          onClick={handleRankPriorityMatch}
+          type="button"
+          onClick={() => void handleIndividualSwissRound()}
           disabled={saving}
           style={{
             height: 56,
@@ -1488,15 +1495,18 @@ const renderPlayers = (list: Player[]) => {
             fontSize: 16,
             border: "none",
             borderRadius: 10,
-            backgroundColor: "orange",
+            backgroundImage: "linear-gradient(to right, #f97316, #ec4899)",
+            boxShadow: "0 0 20px rgba(255, 120, 0, 0.45)",
             color: "white",
-            cursor: "pointer",
+            cursor: saving ? "not-allowed" : "pointer",
+            opacity: saving ? 0.7 : 1,
           }}
         >
           個人戦
         </button>
         <button
-  onClick={handleTeamRandomMatch}
+  type="button"
+  onClick={() => void handleTeamRandomMatch()}
   disabled={saving}
   style={{
     height: 56,
@@ -1504,110 +1514,70 @@ const renderPlayers = (list: Player[]) => {
     fontSize: 16,
     border: "none",
     borderRadius: 10,
-    backgroundColor: "#16a34a",
+    backgroundImage: "linear-gradient(to right, #16a34a, #059669)",
+    boxShadow: "0 0 18px rgba(34, 197, 94, 0.45)",
     color: "white",
-    cursor: "pointer",
+    cursor: saving ? "not-allowed" : "pointer",
+    opacity: saving ? 0.7 : 1,
   }}
 >
   チーム戦
 </button>
-        <button
-          onClick={handleFullRandomMatch}
-          disabled={saving}
-          style={{
-            height: 56,
-            width: "100%",
-            fontSize: 16,
-            border: "none",
-            borderRadius: 10,
-            backgroundColor: "#ef4444",
-            color: "white",
-            cursor: "pointer",
-          }}
-        >
-          ランダム戦
-        </button>
-        <button
-  onClick={handleCasualMatch}
-  style={{
-    height: 56,
-    width: "100%",
-    fontSize: 16,
-    border: "none",
-    borderRadius: 10,
-    backgroundColor: "#8b5cf6",
-    color: "white",
-    cursor: "pointer",
-  }}
->
-  交流会マッチ
-</button>
-        {latestMatch && (
+        {latestMatch ? (
           <button
-            onClick={handleStartRound}
+            type="button"
+            onClick={() => void handleStartRound()}
             disabled={startingRound}
             style={{
+              gridColumn: "1 / -1",
               height: 56,
               width: "100%",
               fontSize: 16,
               border: "none",
               borderRadius: 10,
-              backgroundColor: "#2563eb",
+              backgroundImage: "linear-gradient(to right, #3b82f6, #6366f1)",
+              boxShadow: "0 0 20px rgba(59, 130, 246, 0.5)",
               color: "white",
-              cursor: "pointer",
+              cursor: startingRound ? "not-allowed" : "pointer",
+              opacity: startingRound ? 0.7 : 1,
             }}
           >
             {startingRound ? "開始中..." : "ラウンド開始"}
           </button>
-        )}
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1.15fr 1fr 1fr",
-          gap: 20,
-          alignItems: "start",
-          marginBottom: 40,
-        }}
-      >
-        <div>
-          <h2 style={{ marginBottom: 16,}}>🔴 モンボ級</h2>
-          {renderPlayers(grouped.monster)}
-        </div>
-
-        <div>
-          <h2 style={{ marginBottom: 16,}}>🔵 スパボ級</h2>
-          {renderPlayers(grouped.super)}
-        </div>
-
-        <div>
-          <h2 style={{ marginBottom: 16,}}>🟡 ハイボ級</h2>
-          {renderPlayers(grouped.hyper)}
-        </div>
+        ) : null}
       </div>
 
       <div>
-        <h2 style={{ marginBottom: 16, textAlign: "center" }}>直近の卓振り結果</h2>
+        <h2 className="mb-4 text-center text-lg font-bold text-white">
+          直近の卓振り結果
+        </h2>
 
         {!latestMatch ? (
-          <p style={{ textAlign: "center" }}>まだ保存履歴はありません</p>
+          <p className="text-center text-gray-300">まだ保存履歴はありません</p>
         ) : (
           <div
             style={{
-              border: "1px solid #ccc",
+              border: "1px solid rgba(168, 85, 247, 0.35)",
               borderRadius: 12,
               padding: 14,
-              backgroundColor: "#fff",
+              backgroundColor: "rgba(255, 255, 255, 0.08)",
+              boxShadow: "0 0 20px rgba(168, 85, 247, 0.25)",
+              backdropFilter: "blur(8px)",
             }}
           >
-            <div style={{ marginBottom: 16, fontWeight: "bold" }}>
+            <div style={{ marginBottom: 16, fontWeight: "bold", color: "#ffffff" }}>
               卓振り種別：
-              {latestMatch.matchType === "rank-priority"
-  ? "個人戦(階級優先)"
-  : latestMatch.matchType === "team-random"
-  ? "チーム戦(階級優先)"
-  : "完全ランダム戦"}
+              {latestMatch.matchType === "individual-swiss"
+                ? `個人戦（ラウンド制）${
+                    latestMatch.individualRound != null
+                      ? ` · Round ${latestMatch.individualRound}`
+                      : ""
+                  }`
+                : latestMatch.matchType === "rank-priority"
+                  ? "個人戦(階級優先)"
+                  : latestMatch.matchType === "team-random"
+                    ? "チーム戦(階級優先)"
+                    : "完全ランダム戦"}
             </div>
 
             <div
@@ -1632,13 +1602,13 @@ const renderPlayers = (list: Player[]) => {
                   <div
                     key={table.tableNumber}
                     style={{
-                      border: "1px solid #ddd",
+                      border: "1px solid rgba(168, 85, 247, 0.3)",
                       borderRadius: 10,
                       padding: 16,
-                      backgroundColor: "#fff",
+                      backgroundColor: "rgba(15, 23, 42, 0.45)",
                     }}
                   >
-                    <div style={{ fontWeight: "bold", marginBottom: 8 }}>
+                    <div style={{ fontWeight: "bold", marginBottom: 8, color: "#ffffff" }}>
                       卓{table.tableNumber}
                     </div>
 
@@ -1652,7 +1622,7 @@ const renderPlayers = (list: Player[]) => {
                       状態：{status.text}
                     </div>
 
-                    <div style={{ marginBottom: 8 }}>
+                    <div style={{ marginBottom: 8, color: "#d1d5db" }}>
                       種別：{renderTypeLabel(table.type)}
                     </div>
 
@@ -1681,11 +1651,23 @@ const renderPlayers = (list: Player[]) => {
    </div>
  
    {/* 👇追加 */}
-   {table.player1.tags && (
-     <div style={{ fontSize: 12, color: "#666" }}>
-       {table.player1.tags.playStyle === "enjoy" ? "エンジョイ勢" : "ガチ勢"}
-     </div>
-   )}
+   <div style={{ fontSize: 12, color: "#9ca3af" }}>
+     {playStyleLine(
+       normalizePlayStyle({
+         playStyle: table.player1.playStyle,
+         tags: table.player1.tags,
+       })
+     )}
+     {badgesEmojiCompact(
+       normalizeBadges({ badges: table.player1.badges })
+     ) ? (
+       <span style={{ marginLeft: 6 }}>
+         {badgesEmojiCompact(
+           normalizeBadges({ badges: table.player1.badges })
+         )}
+       </span>
+     ) : null}
+   </div>
  </>
   ) : (
     "空席"
@@ -1707,12 +1689,33 @@ const renderPlayers = (list: Player[]) => {
   2人目：
   {table.player2 ? (
     <>
-      {table.player2.name}
-      {table.player2Team && `（${table.player2Team}）`}
-      {`（${table.player2.rank}）`}
+      <div style={{ fontWeight: "bold" }}>{table.player2.name}</div>
+      <div>
+        {table.player2Team && `（${table.player2Team}）`}
+        {`（${table.player2.rank}）`}
+      </div>
+      <div style={{ fontSize: 12, color: "#9ca3af" }}>
+        {playStyleLine(
+          normalizePlayStyle({
+            playStyle: table.player2.playStyle,
+            tags: table.player2.tags,
+          })
+        )}
+        {badgesEmojiCompact(
+          normalizeBadges({ badges: table.player2.badges })
+        ) ? (
+          <span style={{ marginLeft: 6 }}>
+            {badgesEmojiCompact(
+              normalizeBadges({ badges: table.player2.badges })
+            )}
+          </span>
+        ) : null}
+      </div>
     </>
   ) : (
-    "不在"
+    table.winnerId && latestMatch.matchType === "individual-swiss"
+      ? "不戦勝（輪空）"
+      : "不在"
   )}
 </div>
 
@@ -1722,11 +1725,12 @@ const renderPlayers = (list: Player[]) => {
                           marginBottom: 12,
                           padding: 10,
                           borderRadius: 8,
-                          backgroundColor: "#fff7ed",
-                          border: "1px solid #fdba74",
+                          backgroundColor: "rgba(251, 146, 60, 0.12)",
+                          border: "1px solid rgba(251, 146, 60, 0.45)",
+                          color: "#e5e7eb",
                         }}
                       >
-                        <div style={{ color: "orange", fontWeight: "bold", marginBottom: 6 }}>
+                        <div style={{ color: "#fb923c", fontWeight: "bold", marginBottom: 6 }}>
                           勝利申請中：{pendingName}
                         </div>
 
@@ -1747,7 +1751,7 @@ const renderPlayers = (list: Player[]) => {
                     )}
 
                     {winnerName && (
-                      <div style={{ marginBottom: 10, color: "#16a34a", fontWeight: "bold" }}>
+                      <div style={{ marginBottom: 10, color: "#4ade80", fontWeight: "bold" }}>
                         正式勝者：{winnerName}
                       </div>
                     )}
@@ -1760,7 +1764,8 @@ const renderPlayers = (list: Player[]) => {
                           padding: "10px 14px",
                           border: "none",
                           borderRadius: 8,
-                          backgroundColor: "#2563eb",
+                          backgroundImage: "linear-gradient(to right, #3b82f6, #6366f1)",
+                          boxShadow: "0 0 14px rgba(59, 130, 246, 0.45)",
                           color: "white",
                           cursor: "pointer",
                           marginRight: 8,
@@ -1779,7 +1784,8 @@ const renderPlayers = (list: Player[]) => {
                           padding: "10px 14px",
                           border: "none",
                           borderRadius: 8,
-                          backgroundColor: "#16a34a",
+                          backgroundImage: "linear-gradient(to right, #22c55e, #059669)",
+                          boxShadow: "0 0 14px rgba(34, 197, 94, 0.45)",
                           color: "white",
                           cursor: "pointer",
                           marginRight: 8,
@@ -1799,7 +1805,8 @@ const renderPlayers = (list: Player[]) => {
                             padding: "10px 14px",
                             border: "none",
                             borderRadius: 8,
-                            backgroundColor: "orange",
+                            backgroundImage: "linear-gradient(to right, #f97316, #ec4899)",
+                            boxShadow: "0 0 12px rgba(249, 115, 22, 0.4)",
                             color: "white",
                             cursor: "pointer",
                           }}
@@ -1814,10 +1821,11 @@ const renderPlayers = (list: Player[]) => {
                           disabled={savingTableNumber === table.tableNumber}
                           style={{
                             padding: "10px 14px",
-                            border: "none",
                             borderRadius: 8,
-                            backgroundColor: "#666",
-                            color: "white",
+                            background: "rgba(255, 255, 255, 0.12)",
+                            border: "1px solid rgba(168, 85, 247, 0.4)",
+                            boxShadow: "0 0 12px rgba(168, 85, 247, 0.25)",
+                            color: "#ffffff",
                             cursor: "pointer",
                           }}
                         >
@@ -1832,6 +1840,9 @@ const renderPlayers = (list: Player[]) => {
           </div>
         )}
       </div>
+          </div>
+        }
+      />
     </div>
   );
 }
