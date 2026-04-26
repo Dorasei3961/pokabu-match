@@ -438,8 +438,6 @@ useEffect(() => {
 
       const best = pickBestWaitingOpponentForCasual(
         myRank,
-        player.playStyle,
-        player.badges,
         candidates,
         pastOpponentIds,
         rankPriority,
