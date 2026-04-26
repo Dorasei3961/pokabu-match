@@ -434,10 +434,15 @@ useEffect(() => {
         id: p.id,
         name: p.name || "",
         rank: p.rank,
+        playStyle: normalizePlayStyle(p),
+        playerAttributes: normalizeBadges(p),
+        waitingSince: p.waitingSince,
       }));
 
       const best = pickBestWaitingOpponentForCasual(
         myRank,
+        player.playStyle,
+        player.badges,
         candidates,
         pastOpponentIds,
         rankPriority,
@@ -1044,6 +1049,209 @@ useEffect(() => {
             </div>
             <hr style={{ margin: "20px 0", borderColor: "rgba(255,255,255,0.22)" }} />
             <p style={{ color: "rgba(248,250,252,0.92)" }}>まだ対戦がありません</p>
+            <div
+              style={{
+                marginTop: 22,
+                paddingTop: 22,
+                borderTop: "1px solid rgba(255,255,255,0.14)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: "0.12em",
+                  color: "rgba(248,250,252,0.45)",
+                  marginBottom: 12,
+                  textAlign: "center",
+                }}
+              >
+                操作
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                  width: "100%",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={handleNextMatch}
+                  disabled={!canNextMatch || !tableInfo}
+                  style={{
+                    ...casualMatchPrimaryBtn,
+                    fontSize: canNextMatch ? 17 : 14,
+                    lineHeight: canNextMatch ? 1.1 : 1.25,
+                    whiteSpace: "normal",
+                    padding: canNextMatch ? "0 16px" : "10px 16px",
+                    background:
+                      canNextMatch && !!tableInfo
+                        ? "#16a34a"
+                        : "rgba(148,163,184,0.3)",
+                    color: "white",
+                    boxShadow:
+                      canNextMatch && !!tableInfo
+                        ? "0 0 22px rgba(22,163,74,0.35), 0 4px 14px rgba(2,6,23,0.35)"
+                        : "none",
+                    cursor:
+                      canNextMatch && !!tableInfo ? "pointer" : "not-allowed",
+                    opacity: canNextMatch && !!tableInfo ? 1 : 0.88,
+                  }}
+                >
+                  {canNextMatch
+                    ? "次の対戦へ"
+                    : "待機中1人以上で対戦可能"}
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  style={{
+                    ...casualMatchPrimaryBtn,
+                    background: "rgba(148,163,184,0.3)",
+                    color: "rgba(255,255,255,0.85)",
+                    boxShadow: "none",
+                    cursor: "not-allowed",
+                    opacity: 0.88,
+                  }}
+                >
+                  対戦終了
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  style={{
+                    ...casualMatchPrimaryBtn,
+                    background: "rgba(148,163,184,0.3)",
+                    color: "rgba(255,255,255,0.85)",
+                    boxShadow: "none",
+                    cursor: "not-allowed",
+                    opacity: 0.88,
+                  }}
+                >
+                  Goodを送る
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowOtherOpsMenu((prev) => !prev)}
+                  style={casualMatchSecondaryBtn}
+                >
+                  {showOtherOpsMenu ? "その他の操作を閉じる" : "その他の操作"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowWaitingList((prev) => !prev)}
+                  style={casualMatchSecondaryBtn}
+                >
+                  {showWaitingList
+                    ? "待機中一覧を閉じる"
+                    : `待機人数を見る（${waitingCount}人）`}
+                </button>
+              </div>
+
+              {showOtherOpsMenu ? (
+                <div style={{ ...casualMatchSubGlass, marginTop: 12 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: "rgba(248,250,252,0.5)",
+                      marginBottom: 8,
+                      letterSpacing: "0.03em",
+                    }}
+                  >
+                    その他の操作
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <button
+                      type="button"
+                      onClick={handleRequestRematch}
+                      style={casualMatchSecondaryBtn}
+                    >
+                      再戦を希望
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleOpenMatchSheet}
+                      style={casualMatchSecondaryBtn}
+                    >
+                      対戦シート入力
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {showWaitingList ? (
+                <div style={{ ...casualMatchSubGlass, marginTop: 12 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: "rgba(248,250,252,0.5)",
+                      marginBottom: 8,
+                      letterSpacing: "0.03em",
+                    }}
+                  >
+                    待機中の人
+                  </div>
+                  {waitingPlayersList.length === 0 ? (
+                    <div
+                      style={{
+                        fontSize: 14,
+                        color: "rgba(248,250,252,0.55)",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      待機中の人はいません
+                    </div>
+                  ) : (
+                    waitingPlayersList.map((p) => (
+                      <div
+                        key={p.id}
+                        style={{
+                          padding: "12px 0",
+                          borderBottom:
+                            "1px solid rgba(255,255,255,0.08)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontWeight: 600,
+                            fontSize: 15,
+                            color: "rgba(248,250,252,0.9)",
+                            lineHeight: 1.35,
+                          }}
+                        >
+                          {p.name}{" "}
+                          {p.rank ? (
+                            <span
+                              style={{
+                                fontWeight: 500,
+                                fontSize: 13,
+                                color: "rgba(248,250,252,0.55)",
+                              }}
+                            >
+                              ({p.rank})
+                            </span>
+                          ) : null}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            color: "rgba(248,250,252,0.55)",
+                            marginTop: 4,
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          {p.summary}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </div>
           </>
         ) : (
           <>
