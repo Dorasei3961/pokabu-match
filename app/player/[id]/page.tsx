@@ -434,15 +434,10 @@ useEffect(() => {
         id: p.id,
         name: p.name || "",
         rank: p.rank,
-        playStyle: normalizePlayStyle(p),
-        playerAttributes: normalizeBadges(p),
-        waitingSince: p.waitingSince,
       }));
 
       const best = pickBestWaitingOpponentForCasual(
         myRank,
-        player.playStyle,
-        player.badges,
         candidates,
         pastOpponentIds,
         rankPriority,
