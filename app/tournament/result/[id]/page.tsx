@@ -237,7 +237,7 @@ export default function TournamentResultPage() {
 
   if (!playerId) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#312e81] to-[#1e1b4b] px-4 py-10 text-center text-gray-300">
+      <div className="min-h-screen px-4 py-10 text-center text-gray-300">
         URL が不正です
       </div>
     );
@@ -245,7 +245,7 @@ export default function TournamentResultPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#312e81] to-[#1e1b4b] text-lg text-violet-100">
+      <div className="flex min-h-screen items-center justify-center text-lg text-violet-100">
         読み込み中…
       </div>
     );
@@ -253,7 +253,7 @@ export default function TournamentResultPage() {
 
   if (!boardMatch) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#312e81] to-[#1e1b4b] px-4 py-12 text-center">
+      <div className="min-h-screen px-4 py-12 text-center">
         <p className="text-lg text-violet-100">
           進行中の大会個人戦の卓が見つかりません。
         </p>
@@ -265,7 +265,7 @@ export default function TournamentResultPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#312e81] to-[#1e1b4b] px-4 pb-28 pt-6 sm:px-5">
+    <div className="min-h-screen px-4 pb-28 pt-6 sm:px-5">
       <div className="mx-auto max-w-md space-y-5">
         <header className="text-center">
           <p className="text-xs font-semibold tracking-widest text-violet-300/90">

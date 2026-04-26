@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { DEFAULT_EVENT_ID } from "@/lib/tournamentBoardMatches";
+import type { BadgeId, PlayStyleKey } from "@/lib/playerBadges";
+import {
+  badgesEmojiCompact,
+  normalizePlayerBadges,
+  normalizePlayStyle,
+  PLAY_STYLE_META,
+} from "@/lib/playerBadges";
 
 type BoardMatch = {
   id: string;
@@ -36,76 +43,125 @@ function isTournamentIndividualBoardRow(data: Record<string, unknown>): boolean 
 }
 
 const pageStyle: React.CSSProperties = {
-  padding: 20,
+  minHeight: "100vh",
+  boxSizing: "border-box",
+  padding: "14px 12px 20px",
   maxWidth: 900,
   margin: "0 auto",
 };
 
 const titleStyle: React.CSSProperties = {
-  fontSize: 32,
+  fontSize: 26,
   fontWeight: 800,
   textAlign: "center",
-  marginBottom: 20,
+  marginBottom: 12,
+  color: "#f8fafc",
 };
 
 const subStyle: React.CSSProperties = {
   textAlign: "center",
-  fontSize: 14,
-  color: "#666",
-  marginBottom: 24,
+  fontSize: 13,
+  color: "rgba(226,232,240,0.78)",
+  marginBottom: 14,
 };
 
 const gridStyle: React.CSSProperties = {
   display: "grid",
-  gap: 16,
+  gap: 10,
 };
 
 const cardStyle: React.CSSProperties = {
-  border: "1px solid #ddd",
-  borderRadius: 16,
+  border: "1px solid rgba(255,255,255,0.18)",
+  borderRadius: 12,
   background: "#fff",
-  padding: 20,
-  boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+  padding: "10px 12px 12px",
+  boxShadow: "0 4px 14px rgba(2,6,23,0.2)",
 };
 
 const tableNoStyle: React.CSSProperties = {
-  fontSize: 24,
+  fontSize: 17,
   fontWeight: 800,
-  marginBottom: 16,
+  marginBottom: 8,
+  color: "#0f172a",
+  letterSpacing: "0.02em",
 };
 
 const playerBoxStyle: React.CSSProperties = {
-  border: "1px solid #eee",
-  borderRadius: 12,
-  padding: "14px 16px",
+  border: "1px solid #e5e7eb",
+  borderRadius: 10,
+  padding: "8px 10px",
   background: "#fafafa",
 };
 
 const nameStyle: React.CSSProperties = {
-  fontSize: 24,
+  fontSize: 17,
   fontWeight: 800,
-  lineHeight: 1.4,
+  lineHeight: 1.25,
+  color: "#0f172a",
+};
+
+const metaLineStyle: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 12,
+  lineHeight: 1.35,
+  color: "rgba(51,65,85,0.92)",
+  fontWeight: 500,
 };
 
 const vsStyle: React.CSSProperties = {
   textAlign: "center",
-  fontSize: 22,
+  fontSize: 15,
   fontWeight: 800,
-  margin: "14px 0",
-  color: "#555",
+  margin: "6px 0",
+  color: "#64748b",
 };
 
 function sortByTable(a: BoardMatch, b: BoardMatch) {
   return a.tableNumber - b.tableNumber;
 }
 
-function MatchGrid({ matches }: { matches: BoardMatch[] }) {
+type PlayerBoardInfo = {
+  rank: string;
+  playStyle: PlayStyleKey;
+  badges: BadgeId[];
+};
+
+function formatRankMetaLine(info: PlayerBoardInfo | undefined): string {
+  if (!info) return "(—)";
+  const rank = (info.rank || "").trim() || "—";
+  const styleEmoji = PLAY_STYLE_META[info.playStyle].emoji;
+  const badgeEmojis = badgesEmojiCompact(info.badges);
+  const tail = `${styleEmoji}${badgeEmojis}`.trim();
+  return `(${rank}${tail ? ` ${tail}` : ""})`;
+}
+
+function PlayerCell({
+  name,
+  playerId,
+  playersById,
+}: {
+  name: string;
+  playerId: string | null;
+  playersById: Record<string, PlayerBoardInfo>;
+}) {
+  const info = playerId ? playersById[playerId] : undefined;
+  return (
+    <div style={playerBoxStyle}>
+      <div style={nameStyle}>{name || "未設定"}</div>
+      <div style={metaLineStyle}>{formatRankMetaLine(info)}</div>
+    </div>
+  );
+}
+
+function MatchGrid({
+  matches,
+  playersById,
+}: {
+  matches: BoardMatch[];
+  playersById: Record<string, PlayerBoardInfo>;
+}) {
   if (matches.length === 0) {
-    return (
-      <p style={{ textAlign: "center", fontSize: 16 }}>
-        まだ対戦中の卓はありません
-      </p>
-    );
+    return null;
   }
   return (
     <div style={gridStyle}>
@@ -114,22 +170,26 @@ function MatchGrid({ matches }: { matches: BoardMatch[] }) {
           <div style={tableNoStyle}>
             卓{match.tableNumber}
             {typeof match.round === "number" ? (
-              <span style={{ fontSize: 14, fontWeight: 600, color: "#666" }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b" }}>
                 {" "}
                 · Round {match.round}
               </span>
             ) : null}
           </div>
 
-          <div style={playerBoxStyle}>
-            <div style={nameStyle}>{match.player1Name ?? "未設定"}</div>
-          </div>
+          <PlayerCell
+            name={match.player1Name ?? "未設定"}
+            playerId={match.player1Id}
+            playersById={playersById}
+          />
 
           <div style={vsStyle}>VS</div>
 
-          <div style={playerBoxStyle}>
-            <div style={nameStyle}>{match.player2Name ?? "未設定"}</div>
-          </div>
+          <PlayerCell
+            name={match.player2Name ?? "未設定"}
+            playerId={match.player2Id}
+            playersById={playersById}
+          />
         </div>
       ))}
     </div>
@@ -139,6 +199,25 @@ function MatchGrid({ matches }: { matches: BoardMatch[] }) {
 export default function BoardPage() {
   const [casualMatches, setCasualMatches] = useState<BoardMatch[]>([]);
   const [tournamentMatches, setTournamentMatches] = useState<BoardMatch[]>([]);
+  const [playersById, setPlayersById] = useState<
+    Record<string, PlayerBoardInfo>
+  >({});
+
+  useEffect(() => {
+    const unsubPlayers = onSnapshot(collection(db, "players"), (snap) => {
+      const next: Record<string, PlayerBoardInfo> = {};
+      snap.docs.forEach((d) => {
+        const data = d.data();
+        next[d.id] = {
+          rank: typeof data.rank === "string" ? data.rank : "",
+          playStyle: normalizePlayStyle(data),
+          badges: normalizePlayerBadges(data as Record<string, unknown>),
+        };
+      });
+      setPlayersById(next);
+    });
+    return () => unsubPlayers();
+  }, []);
 
   useEffect(() => {
     // status で絞る（orderBy("createdAt") だと createdAt 未設定ドキュメントが一覧に出ない）
@@ -174,45 +253,21 @@ export default function BoardPage() {
     return () => unsubscribe();
   }, []);
 
+  const allPlayingMatches = useMemo(
+    () => [...casualMatches, ...tournamentMatches],
+    [casualMatches, tournamentMatches]
+  );
+
   return (
     <div style={pageStyle}>
       <h1 style={titleStyle}>対戦表</h1>
 
-      <h2
-        style={{
-          fontSize: 22,
-          fontWeight: 800,
-          marginTop: 8,
-          marginBottom: 12,
-          textAlign: "center",
-        }}
-      >
-        交流会
-      </h2>
       <div style={subStyle}>
-        {casualMatches.length > 0
-          ? `対戦中 ${casualMatches.length}卓`
+        {allPlayingMatches.length > 0
+          ? `対戦中 ${allPlayingMatches.length}卓`
           : "現在対戦中の卓はありません"}
       </div>
-      <MatchGrid matches={casualMatches} />
-
-      <h2
-        style={{
-          fontSize: 22,
-          fontWeight: 800,
-          marginTop: 36,
-          marginBottom: 12,
-          textAlign: "center",
-        }}
-      >
-        大会個人戦
-      </h2>
-      <div style={subStyle}>
-        {tournamentMatches.length > 0
-          ? `対戦中 ${tournamentMatches.length}卓`
-          : "現在対戦中の卓はありません"}
-      </div>
-      <MatchGrid matches={tournamentMatches} />
+      <MatchGrid matches={allPlayingMatches} playersById={playersById} />
     </div>
   );
 }

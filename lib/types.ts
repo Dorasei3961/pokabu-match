@@ -1,6 +1,10 @@
+import type { SpecialBadgeId } from "./playerBadges";
+
 export type ParticipantStatus =
   | "waiting"
   | "playing"
+  /** 交流会：一時離席。マッチング対象外（待機一覧の人数にも含めない） */
+  | "break"
   | "inactive"
   | "absent"
   | "left";
@@ -18,12 +22,15 @@ export type Participant = {
   status: ParticipantStatus;
   currentMatchId: string | null;
   readyNext?: boolean;
+  waitingSince?: unknown;
   createdAt?: unknown;
   updatedAt?: unknown;
   /** 交流会：プレイスタイル（将来マッチング用・参加登録で保存） */
   playStyle?: "serious" | "enjoy" | "both";
-  /** 交流会：属性バッジ id 配列 */
-  badges?: string[];
+  /** 交流会：プレイヤー属性（主に表示用）。マッチは `lib/matches` 既存仕様（`beginner` のみ参照・スコア0）。Firestore `players.playerAttributes`（旧 `badges` 互換読取あり） */
+  playerAttributes?: string[];
+  /** 交流会：特別属性（Firestore `players.badge` を正規化）。完全に表示専用・マッチングには使わない */
+  specialBadge?: SpecialBadgeId | null;
 };
 
 export type MatchStatus = "scheduled" | "playing" | "finished";

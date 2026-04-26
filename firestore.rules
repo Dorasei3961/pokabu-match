@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // テスト用: スコアシート一覧・保存の確認用。本番では条件を絞ってください。
+    // 他コレクション用のルールは Firebase Console の既存ルールにこのブロックをマージしてください（このファイル単体を deploy すると他パスはデフォルト拒否になります）。
+    match /matchSheets/{sheetId} {
+      allow read, write: if true;
+    }
+  }
+}

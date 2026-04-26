@@ -2,7 +2,8 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #ffffff;
+  --neon-dark-bg: linear-gradient(160deg, #0a0e27 0%, #201060 30%, #2d1b69 60%, #1e3a8a 100%);
 }
 
 @theme inline {
@@ -12,38 +13,59 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 html {
+  margin: 0;
+  padding: 0;
   width: 100%;
+  min-height: 100%;
+  background: var(--neon-dark-bg);
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   overflow-x: hidden;
 }
 
 body {
+  margin: 0;
+  padding: 0;
   width: 100%;
+  min-height: 100%;
   min-width: 0;
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--neon-dark-bg);
+  padding-top: env(safe-area-inset-top);
+  color: #ffffff;
   font-family: Arial, Helvetica, sans-serif;
   overflow-x: hidden;
 }
 
-/** /player/[id] 交流会モード時のみ JS で付与。画像は使わず linear-gradient のみ。 */
+.page-root {
+  min-height: 100vh;
+  /* 固定フッターナビ（AppFooterNav）と重ならない余白 */
+  padding-bottom: calc(72px + env(safe-area-inset-bottom));
+}
+
+/**
+ * 固定フッターナビ（bottom:0 / z-index:60）の上に収める全画面モーダル用。
+ * 下端をあけてナビを見える・操作できるようにする。
+ */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  box-sizing: border-box;
+  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+}
+
+/** /player/[id] 交流会モード時のみ JS で付与（背景管理は body に統一）。 */
 body.player-neon-page {
   min-height: 100vh;
-  background: linear-gradient(
-    180deg,
-    #020617 0%,
-    #0f172a 45%,
-    #1e3a8a 100%
-  );
+  background: var(--neon-dark-bg);
+}
+
+/** /join だけ付与されるクラス（背景管理は body に統一）。 */
+body.join-sunset-page {
+  min-height: 100vh;
 }
 
 /** 交流会：中央 VS の控えめな発光（画像なし） */
@@ -76,3 +98,4 @@ body.player-neon-page {
       0 0 20px rgba(248, 113, 113, 0.3);
   }
 }
+
